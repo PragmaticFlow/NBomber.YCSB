@@ -1,11 +1,11 @@
 ﻿using CommandLine;
 
-namespace NBomber.YCSB
+namespace NBomber.YCSB.Infra
 {
     [Verb("run", HelpText = "Run a workload")]
-    public class YcsbSettings
+    public class YcsbCliArgs
     {
-        [Option( "workload", Required = true, HelpText = "Set workload type")]
+        [Option( "workload", Required = true, HelpText = "Set workload type (A, B, C, D, E)")]
         public Workload Workload { get; set; }
 
         [Option("recordcount", Required = false, Default = 1000, HelpText = "Number of records to insert")]
@@ -20,7 +20,13 @@ namespace NBomber.YCSB
         [Option("db", Required = false, HelpText = "Database type (redis, postgres, etc.)")]
         public string Db { get; set; }
 
-        [Option('p', "prop", HelpText = "Set a property (key=value). Repeat for multiple properties.")]
+        [Option("fieldcount", Required = false, Default = 10, HelpText = "The number of fields in a record (default: 10)")]
+        public int FieldCount { get; set; }
+
+        [Option("fieldlength", Required = false, Default = 100, HelpText = "The size of each field (default: 100)")]
+        public int FieldLength { get; set; }
+
+        [Option('p', "prop", Required = false, Separator = ';', HelpText = "Set a property (key=value). Repeat for multiple properties.")]
         public IEnumerable<string> Props { get; set; } = Enumerable.Empty<string>();
 
         public static Dictionary<string, string> ParseProps(IEnumerable<string> props)

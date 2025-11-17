@@ -1,6 +1,7 @@
 ﻿using NBomber.Contracts;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
+using NBomber.YCSB.Infra;
 using Spectre.Console;
 using StackExchange.Redis; 
 
@@ -15,19 +16,35 @@ namespace NBomber.YCSB.Redis
 
         public RedisYcsbClient(Dictionary<string, string> props)
         {
-            string host = YcsbSettings.Get(props, "redis.host", "localhost");
-            int port = YcsbSettings.ParseInt(YcsbSettings.Get(props, "redis.port", "6379"), 6379);
+            try
+            {
+                var host = YcsbCliArgs.Get(props, "redis.host", "localhost");
+                var port = YcsbCliArgs.ParseInt(YcsbCliArgs.Get(props, "redis.port", "6379"), 6379);
+                var password = YcsbCliArgs.Get(props, "redis.password", "");
 
-            var redis = ConnectionMultiplexer.Connect($"{host}:{port}");
-            _db = redis.GetDatabase();
+                var options = new ConfigurationOptions
+                {
+                    EndPoints = { { host, port } },
+                    Password = string.IsNullOrWhiteSpace(password) ? null : password,
+                    AbortOnConnectFail = false,
+                };
 
-            var endpoints = redis.GetEndPoints();
-            _server = redis.GetServer(endpoints[0]);
+                var redis = ConnectionMultiplexer.Connect(options);
+                _db = redis.GetDatabase();
+
+                var endpoints = redis.GetEndPoints();
+                _server = redis.GetServer(endpoints[0]);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to connect to Redis server: {ex.Message}[/]");
+                throw;
+            }
         }
 
         private static string HashKey(string key) => $"{HashPrefix}{key}";
 
-        public async Task<Response<object>> Insert(string key, Dictionary<string, string> values)
+        public async Task<Response<object>> Insert(string table, string key, Dictionary<string, string> values)
         {
             try
             {
@@ -57,7 +74,7 @@ namespace NBomber.YCSB.Redis
             }
         }
 
-        public async Task<Response<object>> Update(string key, Dictionary<string, string> values)
+        public async Task<Response<object>> Update(string table, string key, Dictionary<string, string> values)
         {
             try
             {
@@ -77,16 +94,28 @@ namespace NBomber.YCSB.Redis
             }
         }
 
-        public async Task<Response<object>> Read(string key)
+        public async Task<Response<object>> Read(string table, string key, HashSet<string> columns)
         {
             try
             {
                 var redisKey = HashKey(key);
 
-                var t = await _db.KeyTypeAsync(redisKey).ConfigureAwait(false);
-                if (t != RedisType.Hash) return Response.Fail();
+                var results = Array.Empty<HashEntry>();
 
-                var results = await _db.HashGetAllAsync(redisKey).ConfigureAwait(false);
+                if (columns == null || columns.Count == 0)
+                {
+                    results = await _db.HashGetAllAsync(redisKey).ConfigureAwait(false);
+                }
+                else 
+                {                     
+                    var redisFields = columns.Select(c => (RedisValue)c).ToArray();
+                    var values = await _db.HashGetAsync(redisKey, redisFields).ConfigureAwait(false);
+                    results = redisFields
+                        .Zip(values, (f, v) => new { f, v })
+                        .Where(x => !x.v.IsNull)
+                        .Select(x => new HashEntry(x.f, x.v))
+                        .ToArray();
+                }
 
                 var sizeBytes = GetSizeInBytes(redisKey, results);
 
@@ -98,23 +127,7 @@ namespace NBomber.YCSB.Redis
             }
         }
 
-        public async Task<Response<object>> ReadLatest()
-        {
-
-            var keys = await _db.SortedSetRangeByRankAsync(HashIndexKey, 0, 0, Order.Descending)
-                        .ConfigureAwait(false);
-            if (keys.Length == 0) return Response.Fail();
-
-            var key = (RedisKey)(string)keys[0];
-
-            var all = await _db.HashGetAllAsync(key).ConfigureAwait(false);
-
-            var sizeBytes = GetSizeInBytes((string)key, all);
-
-            return all.Length > 0 ? Response.Ok(sizeBytes: sizeBytes) : Response.Fail();
-        }
-
-        public async Task<Response<object>> Scan(string startKey, int count)
+        public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> columns)
         {
             try
             {
@@ -130,10 +143,43 @@ namespace NBomber.YCSB.Redis
                                take: count
                            ).ConfigureAwait(false);
 
-                if (keys.Length == 0) return Response.Fail();
+                if (keys.Length == 0)
+                {
+                    return Response.Ok(sizeBytes: 0);
+                }
 
-                var tasks = keys.Select(k => _db.HashGetAllAsync((RedisKey)(string)k)).ToArray();
-                var hashes = await Task.WhenAll(tasks).ConfigureAwait(false);
+                HashEntry[][] hashes;
+
+                if (columns == null || columns.Count == 0)
+                {
+                    var tasks = keys
+                        .Select(k => _db.HashGetAllAsync((RedisKey)(string)k))
+                        .ToArray();
+
+                    hashes = await Task.WhenAll(tasks).ConfigureAwait(false);
+                }
+                else
+                {
+                    var redisFields = columns.Select(c => (RedisValue)c).ToArray();
+
+                    var tasks = keys
+                       .Select(async k =>
+                       {
+                           var values = await _db.HashGetAsync(
+                               (RedisKey)(string)k,
+                               redisFields
+                           ).ConfigureAwait(false);
+
+                           return redisFields
+                               .Zip(values, (f, v) => new { f, v })
+                               .Where(x => !x.v.IsNull)
+                               .Select(x => new HashEntry(x.f, x.v))
+                               .ToArray();
+                       })
+                       .ToArray();
+
+                    hashes = await Task.WhenAll(tasks).ConfigureAwait(false);
+                }
 
                 var sizeBytes = GetSizeInBytes(keys, hashes);
 

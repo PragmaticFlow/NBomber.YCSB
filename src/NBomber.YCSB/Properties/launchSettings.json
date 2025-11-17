@@ -2,7 +2,7 @@
   "profiles": {
     "NBomber.YCSB": {
       "commandName": "Project",
-      "commandLineArgs": "run --workload A --recordcount 1000 --db redis -p redis.host=localhost redis.port=6379"
+      "commandLineArgs": "run --workload E --recordcount 1000 --db redis -p redis.host=localhost; redis.port=6379"
     }
   }
 }

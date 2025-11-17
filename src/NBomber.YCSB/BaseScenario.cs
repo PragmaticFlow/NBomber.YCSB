@@ -2,12 +2,13 @@
 using Bogus;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
+using NBomber.YCSB.Infra;
 
 namespace NBomber.YCSB
 {
     public class BaseScenario (IDbYcsbClient dbClient) 
     {
-        public void Run(YcsbSettings settings)
+        public void Run(YcsbCliArgs settings)
         {
             var operations = WorkloadManager.GetOperations(settings.Workload);
             var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
@@ -15,6 +16,14 @@ namespace NBomber.YCSB
             var scenario = Scenario.Create(workloadDescription, async context =>
             {
                 var randomItem = context.Random.Choice(operations);
+                
+                //var data = context.ScenarioInstanceData;
+
+                var values = new Dictionary<string, string>
+                {
+                    ["field_1"] = "value1",
+                    ["field_2"] = "value2"
+                };
 
                 switch (randomItem)
                 {
@@ -22,34 +31,34 @@ namespace NBomber.YCSB
                         await Step.Run("insert", context, async () =>
                         {
                             var key = context.Random.Next(1, settings.RecordCount + 1).ToString();
-                            var values = new Dictionary<string, string> { 
-                                ["field_1"] = "value1", 
-                                ["field_2"] = "value2" 
-                            };
-                            return await dbClient.Insert(key, values);
+                            return await dbClient.Insert(table: "", key, values);
                         });
                         break;
 
                     case "read":
                         await Step.Run("read", context, async () =>
                         {
-                            var key = context.Random.Next(1, settings.RecordCount + 1).ToString();
-                            return await dbClient.Read(key);
+                            var key = context.Random.Zipf(settings.RecordCount, 1.3).ToString();
+                            var columns = new HashSet<string>();
+                            return await dbClient.Read(table: "", key, columns);
                         });
                         break;
 
-                    case "read_latest":
-                        await Step.Run("read_latest", context, async () =>
+                    case "update":
+                        await Step.Run("update", context, async () =>
                         {
-                            return await dbClient.ReadLatest();
+                            var key = context.Random.Zipf(settings.RecordCount, 1.3).ToString();
+                            return await dbClient.Update(table: "", key, values);
                         });
                         break;
 
                     case "scan":
                         await Step.Run("scan", context, async () =>
                         {
-                            var startKey = context.Random.Next(1, settings.RecordCount + 1).ToString();
-                            return await dbClient.Scan(startKey, count: 10);
+                            var key = context.Random.Zipf(settings.RecordCount, 1.3).ToString();
+                            var recordScan = context.Random.Next(1, 10);
+                            var columns = new HashSet<string>();
+                            return await dbClient.Scan(table: "", key, recordScan, columns);
                         });
                         break; 
                 }
@@ -63,11 +72,16 @@ namespace NBomber.YCSB
             })
             .WithWarmUpDuration(TimeSpan.FromSeconds(3));
 
-            NBomberRunner
-               .RegisterScenarios(scenario)
-               .WithReportingInterval(TimeSpan.FromSeconds(5))
-               //.WithReportFileName(settings.ExportFile)
-               .Run();
+            var runner = NBomberRunner
+                   .RegisterScenarios(scenario)
+                   .WithReportingInterval(TimeSpan.FromSeconds(5));
+
+            if (settings.ExportFile != null)
+            {
+                runner = runner.WithReportFileName(settings.ExportFile);
+            }
+
+            runner.Run();
         }
 
         public static Dictionary<string, Dictionary<string, string>> GenerateRundoms(int count)
