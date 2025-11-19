@@ -11,22 +11,23 @@ namespace NBomber.YCSB.Redis
     {
         private readonly IDatabase _db;
         private readonly IServer _server;
-        private const string HashPrefix = "hash:";
-        private const string HashIndexKey = "idx:hash";
+        private const string INDEX_KEY = "_indices";
+        private const string HASH_PREFIX = "hash:";
 
         public RedisYcsbClient(Dictionary<string, string> props)
         {
             try
             {
-                var host = YcsbCliArgs.Get(props, "redis.host", "localhost");
-                var port = YcsbCliArgs.ParseInt(YcsbCliArgs.Get(props, "redis.port", "6379"), 6379);
-                var password = YcsbCliArgs.Get(props, "redis.password", "");
+                var host = YcsbCliArgs.TryGet(props, "redis.host", defaultValue: "localhost");
+                var port = YcsbCliArgs.TryParseInt(YcsbCliArgs.TryGet(props, "redis.port", defaultValue: "6379"), 6379);
+                var password = YcsbCliArgs.TryGet(props, "redis.password", defaultValue: "");
 
                 var options = new ConfigurationOptions
                 {
                     EndPoints = { { host, port } },
-                    Password = string.IsNullOrWhiteSpace(password) ? null : password,
+                    Password = password,
                     AbortOnConnectFail = false,
+                    AllowAdmin = true,
                 };
 
                 var redis = ConnectionMultiplexer.Connect(options);
@@ -42,232 +43,148 @@ namespace NBomber.YCSB.Redis
             }
         }
 
-        private static string HashKey(string key) => $"{HashPrefix}{key}";
+        private static string AddKeyPrefix(string key) => $"{HASH_PREFIX}{key}";
 
         public async Task<Response<object>> Insert(string table, string key, Dictionary<string, string> values)
         {
-            try
-            {
-                var redisKey = HashKey(key);
+            var redisKey = AddKeyPrefix(key);
 
-                var entries = values
-                   .Select(kv => new HashEntry(kv.Key, kv.Value ?? string.Empty))
-                   .ToArray();
+            var entries = values
+                .Select(kv => new HashEntry(redisKey, kv.Value ?? string.Empty))
+                .ToArray();
 
-                var sizeBytes = GetSizeInBytes(redisKey, entries);
+            var size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(entries);
 
-                await _db.HashSetAsync(redisKey, entries).ConfigureAwait(false);
+            await _db.HashSetAsync(key, entries);
 
-                bool updateIndex = true;
-
-                if (updateIndex)
-                {
-                    await _db.SortedSetAddAsync(HashIndexKey, redisKey, 0)
-                                .ConfigureAwait(false);
-                }
-
-                return Response.Ok(sizeBytes: sizeBytes);
-            }
-            catch (Exception ex)
-            {
-                return Response.Fail(message: ex.Message);
-            }
+            var index = int.Parse(key);
+            await _db.SortedSetAddAsync(INDEX_KEY, key, index);
+                
+            return Response.Ok(sizeBytes: size);
         }
 
         public async Task<Response<object>> Update(string table, string key, Dictionary<string, string> values)
         {
-            try
-            {
-                var redisKey = HashKey(key);
+            var redisKey = AddKeyPrefix(key);
 
-                var entries = values.Select(kv => new HashEntry(kv.Key, kv.Value ?? string.Empty)).ToArray();
+            var entries = values.
+                Select(kv => new HashEntry(kv.Key, kv.Value ?? string.Empty)).
+                ToArray();
 
-                var sizeBytes = GetSizeInBytes(redisKey, entries);
+            var size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(entries);
 
-                await _db.HashSetAsync(redisKey, entries).ConfigureAwait(false);
+            await _db.HashSetAsync(redisKey, entries);
 
-                return Response.Ok(sizeBytes: sizeBytes);
-            }
-            catch (Exception ex)
-            {
-                return Response.Fail(message: ex.Message);
-            }
+            return Response.Ok(sizeBytes: size);
         }
 
-        public async Task<Response<object>> Read(string table, string key, HashSet<string> columns)
+        public async Task<Response<object>> Read(string table, string key, HashSet<string> fields)
         {
-            try
+            var redisKey = AddKeyPrefix(key);
+
+            if (fields == null || fields.Count == 0)
             {
-                var redisKey = HashKey(key);
+                var entries = await _db.HashGetAllAsync(redisKey);
 
-                var results = Array.Empty<HashEntry>();
+                var sizeBytes = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(entries);
 
-                if (columns == null || columns.Count == 0)
-                {
-                    results = await _db.HashGetAllAsync(redisKey).ConfigureAwait(false);
-                }
-                else 
-                {                     
-                    var redisFields = columns.Select(c => (RedisValue)c).ToArray();
-                    var values = await _db.HashGetAsync(redisKey, redisFields).ConfigureAwait(false);
-                    results = redisFields
-                        .Zip(values, (f, v) => new { f, v })
-                        .Where(x => !x.v.IsNull)
-                        .Select(x => new HashEntry(x.f, x.v))
-                        .ToArray();
-                }
-
-                var sizeBytes = GetSizeInBytes(redisKey, results);
-
-                return results.Length > 0 ? Response.Ok(sizeBytes: sizeBytes) : Response.Fail();
+                return entries.Length > 0 ? Response.Ok(sizeBytes: sizeBytes) : Response.Fail();
             }
-            catch (Exception ex)
+            else
             {
-                return Response.Fail(message: ex.Message);
-            }
+                var redisFields = fields.Select(c => (RedisValue)c).ToArray();
+
+                var values = await _db.HashGetAsync(redisKey, redisFields);
+
+                var size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(values);
+
+                return Response.Ok(sizeBytes: size);
+            }      
         }
 
-        public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> columns)
+        public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> fields)
         {
-            try
+            double startIndex = int.Parse(startKey);
+
+            var startRedisKey = AddKeyPrefix(startKey);
+
+            var keys = await _db.SortedSetRangeByScoreAsync(
+                INDEX_KEY,
+                start: startIndex,
+                stop: double.PositiveInfinity,
+                Exclude.None,
+                Order.Ascending,
+                skip: 0,
+                take: count
+            );
+
+            if (keys.Length == 0)
             {
-                var startMember = HashKey(startKey);
-
-                var keys = await _db.SortedSetRangeByValueAsync(
-                               HashIndexKey,
-                               min: startMember,
-                               max: "+",
-                               Exclude.None,
-                               Order.Ascending,
-                               skip: 0,
-                               take: count
-                           ).ConfigureAwait(false);
-
-                if (keys.Length == 0)
-                {
-                    return Response.Ok(sizeBytes: 0);
-                }
-
-                HashEntry[][] hashes;
-
-                if (columns == null || columns.Count == 0)
-                {
-                    var tasks = keys
-                        .Select(k => _db.HashGetAllAsync((RedisKey)(string)k))
-                        .ToArray();
-
-                    hashes = await Task.WhenAll(tasks).ConfigureAwait(false);
-                }
-                else
-                {
-                    var redisFields = columns.Select(c => (RedisValue)c).ToArray();
-
-                    var tasks = keys
-                       .Select(async k =>
-                       {
-                           var values = await _db.HashGetAsync(
-                               (RedisKey)(string)k,
-                               redisFields
-                           ).ConfigureAwait(false);
-
-                           return redisFields
-                               .Zip(values, (f, v) => new { f, v })
-                               .Where(x => !x.v.IsNull)
-                               .Select(x => new HashEntry(x.f, x.v))
-                               .ToArray();
-                       })
-                       .ToArray();
-
-                    hashes = await Task.WhenAll(tasks).ConfigureAwait(false);
-                }
-
-                var sizeBytes = GetSizeInBytes(keys, hashes);
-
-                return Response.Ok(sizeBytes: sizeBytes);
+                return Response.Ok(sizeBytes: 0);
             }
-            catch (Exception ex)
+
+            if (fields == null || fields.Count == 0)
             {
-                return Response.Fail(message: ex.Message);
+                var tasks = keys.Select(k => _db.HashGetAllAsync((string)k));                        
+
+                var entries = await Task.WhenAll(tasks);
+                    
+                var size = RedisHelper.GetSize(keys) + RedisHelper.GetSize(entries);
+
+                return Response.Ok(sizeBytes: size);
+            }
+            else
+            {
+                var redisFields = fields.Select(c => (RedisValue)c).ToArray();
+
+                var tasks = keys.Select(k => _db.HashGetAsync((string)k, redisFields));
+
+                var values = await Task.WhenAll(tasks);
+
+                var size = RedisHelper.GetSize(keys) + RedisHelper.GetSize(values);
+
+                return Response.Ok(sizeBytes: size);
             }
         }
 
         public async Task<Response<object>> DeleteAllData()
         {
-            try
-            {
-                await _server.FlushDatabaseAsync().ConfigureAwait(false);
+            await _server.FlushDatabaseAsync();
 
-                return Response.Ok();
-            }
-            catch (Exception ex)
-            {
-                return Response.Fail<object>(message: ex.Message);
-            }
+            return Response.Ok();
         }
 
         public async Task<Response<object>> BulkInsert(Dictionary<string, Dictionary<string, string>> data)
         {
-            try
-            {
-                const int chunkSize = 1000;
+            const int chunkSize = 1000;
 
-                foreach (var chunk in data.Chunk(chunkSize))
+            foreach (var chunk in data.Chunk(chunkSize))
+            {
+                var batch = _db.CreateBatch();
+                var tasks = new List<Task>();
+
+                foreach (var item in chunk)
                 {
-                    var batch = _db.CreateBatch();
-                    var tasks = new List<Task>();
+                    var redisKey = AddKeyPrefix(item.Key);
 
-                    foreach (var item in chunk)
-                    {
-                        var key = HashKey(item.Key);
-                        var entries = item.Value.Select(f => new HashEntry(f.Key, f.Value ?? string.Empty)).ToArray();
-                        tasks.Add(batch.HashSetAsync(key, entries));
+                    var entries = item.Value.Select(f => new HashEntry(f.Key, f.Value ?? string.Empty)).ToArray();
+                        
+                    tasks.Add(batch.HashSetAsync(redisKey, entries));
 
-                        tasks.Add(batch.SortedSetAddAsync(HashIndexKey, key, 0));
-                    }
-                     
-                    batch.Execute();
-                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                    var index = int.Parse(item.Key);
+                    tasks.Add(batch.SortedSetAddAsync(INDEX_KEY, redisKey, index));
                 }
+                     
+                batch.Execute();
+                await Task.WhenAll(tasks);
+            }
 
-                return Response.Ok();
-            }
-            catch (Exception ex)
-            {
-                return Response.Fail<object>(message: ex.Message);
-            }
+            return Response.Ok();
         }
 
         public async Task<Response<object>> InitDb()
         {
             return Response.Ok();
-        }
-
-        private static long GetSizeInBytes(IEnumerable<(string Key, HashEntry[] Entries)> items)
-        {
-            long total = 0;
-
-            foreach (var (key, entries) in items)
-            {
-                total += System.Text.Encoding.UTF8.GetByteCount(key);
-
-                foreach (var e in entries)
-                {
-                    total += System.Text.Encoding.UTF8.GetByteCount(e.Name);
-                    total += System.Text.Encoding.UTF8.GetByteCount(e.Value);
-                }
-            }
-
-            return total;
-        }
-
-        private static long GetSizeInBytes(string key, HashEntry[] entries)
-            => GetSizeInBytes([(key, entries)]);
-
-
-        private static long GetSizeInBytes(RedisValue[] keys, HashEntry[][] hashes)
-        {
-            var items = keys.Zip(hashes, (k, h) => ((string)k, h));
-            return GetSizeInBytes(items);
         }
     }
 }

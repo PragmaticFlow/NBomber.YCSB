@@ -36,12 +36,12 @@ namespace NBomber.YCSB.Infra
                 .ToDictionary(x => x[0], x => x.Length > 1 ? x[1] : "");
         }
 
-        public static string Get(IDictionary<string, string> props, string key, string defaultValue)
+        public static string TryGet(IDictionary<string, string> props, string key, string defaultValue)
             => props != null && props.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
             ? value
             : defaultValue;
 
-        public static int ParseInt(string s, int defaultValue)
+        public static int TryParseInt(string s, int defaultValue)
             => int.TryParse(s, out var x) ? x : defaultValue;
     }
 }

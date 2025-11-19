@@ -1,5 +1,6 @@
 ﻿#pragma warning disable CS4014
 using Bogus;
+using NBomber.Contracts;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
@@ -17,12 +18,12 @@ namespace NBomber.YCSB
             {
                 var randomItem = context.Random.Choice(operations);
                 
-                //var data = context.ScenarioInstanceData;
+                var data = context.ScenarioInstanceData;
 
                 var values = new Dictionary<string, string>
                 {
-                    ["field_1"] = "value1",
-                    ["field_2"] = "value2"
+                    ["1"] = "value1",
+                    ["2"] = "value2"
                 };
 
                 switch (randomItem)
@@ -30,7 +31,7 @@ namespace NBomber.YCSB
                     case "insert":
                         await Step.Run("insert", context, async () =>
                         {
-                            var key = context.Random.Next(1, settings.RecordCount + 1).ToString();
+                            var key = GetRundomUniform(settings.RecordCount, context);
                             return await dbClient.Insert(table: "", key, values);
                         });
                         break;
@@ -38,8 +39,8 @@ namespace NBomber.YCSB
                     case "read":
                         await Step.Run("read", context, async () =>
                         {
-                            var key = context.Random.Zipf(settings.RecordCount, 1.3).ToString();
-                            var columns = new HashSet<string>();
+                            var key = GetRundomZipf(settings.RecordCount, context);
+                            var columns = new HashSet<string> { "1" };
                             return await dbClient.Read(table: "", key, columns);
                         });
                         break;
@@ -47,7 +48,7 @@ namespace NBomber.YCSB
                     case "update":
                         await Step.Run("update", context, async () =>
                         {
-                            var key = context.Random.Zipf(settings.RecordCount, 1.3).ToString();
+                            var key = GetRundomZipf(settings.RecordCount, context);
                             return await dbClient.Update(table: "", key, values);
                         });
                         break;
@@ -55,9 +56,9 @@ namespace NBomber.YCSB
                     case "scan":
                         await Step.Run("scan", context, async () =>
                         {
-                            var key = context.Random.Zipf(settings.RecordCount, 1.3).ToString();
+                            var key = GetRundomZipf(settings.RecordCount, context);
                             var recordScan = context.Random.Next(1, 10);
-                            var columns = new HashSet<string>();
+                            var columns = new HashSet<string> { "1" };
                             return await dbClient.Scan(table: "", key, recordScan, columns);
                         });
                         break; 
@@ -84,10 +85,19 @@ namespace NBomber.YCSB
             runner.Run();
         }
 
+        public static string GetRundomZipf(int recordCount, IScenarioContext context)
+        {
+            return context.Random.Zipf(recordCount, 1.3).ToString();
+        }
+
+        public static string GetRundomUniform(int recordCount, IScenarioContext context)
+        {
+            return context.Random.Next(1, recordCount + 1).ToString();
+        }
         public static Dictionary<string, Dictionary<string, string>> GenerateRundoms(int count)
         {
             var faker = new Faker();
-            var fields = new[] { "field_1", "field_2" };
+            var fields = new[] { "1", "2" };
 
             var keys = Enumerable.Range(1, count).Select(i => i.ToString());
 
