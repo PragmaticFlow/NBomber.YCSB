@@ -9,7 +9,7 @@ Console.WriteLine("run --workload A --recordcount 1000 --db redis -p redis.host=
 Console.WriteLine("Type 'exit' to quit.");
 
 Parser.Default.ParseArguments<YcsbCliArgs>(args)
-   .WithParsed(async settings =>
+   .WithParsed(settings =>
    {
        var argsValidator = new YcsbCliArgsValidator();
 
