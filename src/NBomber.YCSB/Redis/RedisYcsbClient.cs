@@ -108,6 +108,7 @@ public class RedisYcsbClient : IDbYcsbClient
 
         var startRedisKey = AddKeyPrefix(startKey);
 
+        // Query Redis Sorted Set to read keys in the specified range
         var keys = await _db.SortedSetRangeByScoreAsync(
             INDEX_KEY,
             start: startIndex,
