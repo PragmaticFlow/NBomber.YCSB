@@ -1,7 +1,10 @@
-﻿using NBomber.YCSB;
-using NBomber.YCSB.Redis;
-using CommandLine;
+﻿using CommandLine;
+using MongoDB.Driver;
+using NBomber.YCSB;
+using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
+using NBomber.YCSB.MongoDb;
+using NBomber.YCSB.Redis;
 
 Console.WriteLine("NBomber YCSB interactive console started.");
 Console.WriteLine("Type a command (for example):");
@@ -23,9 +26,7 @@ Parser.Default.ParseArguments<YcsbCliArgs>(args)
            return;
        }
 
-       var propsDict = YcsbCliArgs.ParseProps(settings.Props);
-
-       var client = new RedisYcsbClient(propsDict);
+       var client = GetYcsbClient(settings);
 
        var scenario = new BaseScenario(client);
        scenario.Run(settings);
@@ -36,3 +37,18 @@ Parser.Default.ParseArguments<YcsbCliArgs>(args)
        foreach (var error in errors)
            Console.WriteLine($"  {error}");
    });
+
+static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings) 
+{
+    var propsDict = YcsbCliArgs.ParseProps(settings.Props);
+
+    switch (settings.Db?.ToLower()) 
+    { 
+        case "redis": 
+            return new RedisYcsbClient(propsDict);
+        case "mongodb":
+            return new MongoDbYcsbClient(propsDict);
+        default: 
+            throw new NotSupportedException($"Database '{settings.Db}' is not supported.");
+    }
+}

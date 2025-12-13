@@ -69,15 +69,6 @@ public interface IDbYcsbClient
     Task<Response<object>> DeleteAllData();
 
     /// <summary>
-    /// Initializes the database or storage layer before running workloads.
-    /// Typically used for creating tables, indexes, or establishing connections.
-    /// </summary>
-    /// <returns>
-    /// A <see cref="Response{T}"/> describing the initialization result.
-    /// </returns>
-    Task<Response<object>> InitDb();
-
-    /// <summary>
     /// Performs a bulk insert operation for efficiently loading initial data.
     /// </summary>
     /// <param name="data">
@@ -86,5 +77,14 @@ public interface IDbYcsbClient
     /// <returns>
     /// A <see cref="Response{T}"/> representing the result of the bulk insert.
     /// </returns>
-    Task<Response<object>> BulkInsert(Dictionary<string, Dictionary<string, string>> data);
+    Task<Response<object>> BulkInsert(string table, Dictionary<string, Dictionary<string, string>> data);
+
+    /// <summary>
+    /// Initializes the database or storage layer before running workloads.
+    /// Typically used for creating tables, indexes, or establishing connections.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Response{T}"/> describing the initialization result.
+    /// </returns>
+    Task<Response<object>> InitDb();
 }

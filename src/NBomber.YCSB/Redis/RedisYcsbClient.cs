@@ -155,7 +155,7 @@ public class RedisYcsbClient : IDbYcsbClient
         return Response.Ok();
     }
 
-    public async Task<Response<object>> BulkInsert(Dictionary<string, Dictionary<string, string>> data)
+    public async Task<Response<object>> BulkInsert(string table, Dictionary<string, Dictionary<string, string>> data)
     {
         const int chunkSize = 1000;
 

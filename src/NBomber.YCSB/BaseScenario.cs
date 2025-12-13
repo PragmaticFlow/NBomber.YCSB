@@ -13,6 +13,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
     {
         var operations = WorkloadManager.GetOperations(settings.Workload);
         var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
+        var tableName = "test_table";
 
         var scenario = Scenario.Create(workloadDescription, async context =>
         {
@@ -32,7 +33,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
                     await Step.Run("insert", context, async () =>
                     {
                         var key = GetRundomUniform(settings.RecordCount, context);
-                        return await dbClient.Insert(table: "", key, values);
+                        return await dbClient.Insert(table: tableName, key, values);
                     });
                     break;
 
@@ -41,7 +42,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
                     {
                         var key = GetRundomZipf(settings.RecordCount, context);
                         var columns = new HashSet<string> { "1" };
-                        return await dbClient.Read(table: "", key, columns);
+                        return await dbClient.Read(table: tableName, key, columns);
                     });
                     break;
 
@@ -49,7 +50,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
                     await Step.Run("update", context, async () =>
                     {
                         var key = GetRundomZipf(settings.RecordCount, context);
-                        return await dbClient.Update(table: "", key, values);
+                        return await dbClient.Update(table: tableName, key, values);
                     });
                     break;
 
@@ -59,7 +60,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
                         var key = GetRundomZipf(settings.RecordCount, context);
                         var recordScan = context.Random.Next(1, 10);
                         var columns = new HashSet<string> { "1" };
-                        return await dbClient.Scan(table: "", key, recordScan, columns);
+                        return await dbClient.Scan(table: tableName, key, recordScan, columns);
                     });
                     break; 
             }
@@ -69,12 +70,14 @@ public class BaseScenario(IDbYcsbClient dbClient)
             await dbClient.DeleteAllData();
             dbClient.InitDb();
             var list = GenerateRundoms(settings.RecordCount);
-            await dbClient.BulkInsert(list);
+            await dbClient.BulkInsert(tableName, list);
         })
         .WithWarmUpDuration(TimeSpan.FromSeconds(3));
 
         var runner = NBomberRunner
                .RegisterScenarios(scenario)
+               .WithTestName($"Test {settings.Db} - {workloadDescription}")
+               .WithTestSuite($"Test {settings.Db} - {workloadDescription}")
                .WithReportingInterval(TimeSpan.FromSeconds(5));
 
         if (settings.ExportFile != null)
