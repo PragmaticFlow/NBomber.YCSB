@@ -2,7 +2,7 @@
 
 namespace NBomber.YCSB.Redis;
 
-public static class RedisHelper
+static class RedisHelper
 {
     public static long GetSize(string value)
     {

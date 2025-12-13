@@ -1,199 +1,181 @@
-﻿//using MongoDB.Bson;
-//using MongoDB.Driver;
-//using NBomber.YCSB.DAL;
+﻿using MongoDB.Bson;
+using MongoDB.Driver;
+using NBomber.Contracts;
+using NBomber.CSharp;
+using NBomber.YCSB.DAL;
+using NBomber.YCSB.Infra;
+using Spectre.Console;
 
-//namespace NBomber.YCSB.MongoDb
-//{
-//    public class MongoDbYcsbClient : IDbYcsbClient
-//    {
-//        private readonly IMongoCollection<BsonDocument> _col;
+namespace NBomber.YCSB.MongoDb;
 
-//        public MongoDbYcsbClient(string connectionString, string databaseName, string collectionName)
-//        {
-//            var client = new MongoClient(connectionString);
-//            var db = client.GetDatabase(databaseName);
-//            _col = db.GetCollection<BsonDocument>(collectionName);
-//        }
+public class MongoDbYcsbClient : IDbYcsbClient
+{
+    private readonly IMongoDatabase _db;
+    private readonly MongoClient _client;
+    private readonly string databaseName = "ycsb";
 
-//        private async Task EnsureIndexesAsync()
-//        {
-//            var idxModel = new CreateIndexModel<BsonDocument>(
-//                Builders<BsonDocument>.IndexKeys.Descending("createdAt"),
-//                new CreateIndexOptions { Background = true, Name = "ix_createdAt_desc" }
-//            );
-//            await _col.Indexes.CreateOneAsync(idxModel).ConfigureAwait(false);
-//        }
+    public MongoDbYcsbClient(Dictionary<string, string> props)
+    {
+        var url = YcsbCliArgs.TryGet(props, "mongodb.url", defaultValue: "mongodb://localhost:27017");
 
-//        public async Task<Status> BulkInsert(Dictionary<string, Dictionary<string, string>> data)
-//        {
-//            try
-//            {
-//                var now = DateTime.UtcNow;
+        _client = new MongoClient(url);
+        _db = _client.GetDatabase(databaseName);
+    }
 
-//                var docs = data.Select(kvp => new BsonDocument
-//                {
-//                    ["_id"] = kvp.Key,
-//                    ["fields"] = new BsonDocument(kvp.Value.Select(f =>
-//                        new BsonElement(f.Key, f.Value ?? string.Empty))),
-//                    ["createdAt"] = now,
-//                    ["updatedAt"] = now
-//                }).ToList();
+    public async Task<Response<object>> Insert(string table, string key, Dictionary<string, string> values)
+    {
+        var col = _db.GetCollection<BsonDocument>(table);
 
-//                var opts = new InsertManyOptions { IsOrdered = false };
-//                await _col.InsertManyAsync(docs, opts).ConfigureAwait(false);
+        var filter = MongoDbHelper.BuildFilter(key);
 
-//                return Status.Ok;
-//            }
-//            catch 
-//            { 
-//                return Status.Error;
-//            }
-//        }
+        var existing = await col.Find(filter).FirstOrDefaultAsync();
 
-//        public async Task<Status> DeleteAllData()
-//        {
-//            try
-//            {
-//                await _col.Database.DropCollectionAsync(_col.CollectionNamespace.CollectionName)
-//                                   .ConfigureAwait(false);
-//                return Status.Ok;
-//            }
-//            catch
-//            {
-//                return Status.Error;
-//            }
-//        }
+        if (existing == null)
+            return Response.Fail();
 
-//        public async Task<Status> InitDb()
-//        {
-//            try
-//            {
-//                await EnsureIndexesAsync().ConfigureAwait(false);
-//                return Status.Ok;
-//            }
-//            catch
-//            {
-//                return Status.Error;
-//            }
-//        }
+        var size = MongoDbHelper.GetSize(existing);
 
-//        public async Task<Status> Insert(string key, Dictionary<string, string> values)
-//        {
-//            try
-//            {
-//                var now = DateTime.UtcNow;
+        var updates = values
+            .Select(kv =>
+                Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
+            ).ToList();
 
-//                var doc = new BsonDocument
-//                {
-//                    ["_id"] = $"new_{key}",
-//                    ["fields"] = new BsonDocument(values.Select(kv =>
-//                        new BsonElement(kv.Key, kv.Value ?? string.Empty))),
-//                    ["createdAt"] = now,
-//                    ["updatedAt"] = now
-//                };
+        updates.Add(Builders<BsonDocument>.Update.Set("updatedAt", DateTime.UtcNow));
 
-//                await _col.InsertOneAsync(doc).ConfigureAwait(false);
-//                return Status.Ok;
-//            }
-//            catch
-//            { 
-//                return Status.Error;
-//            }
-//        }
+        var update = Builders<BsonDocument>.Update.Combine(updates);
 
-//        public async Task<Status> Read(string key)
-//        {
-//            try
-//            {
-//                var doc = await _col
-//                    .Find(Builders<BsonDocument>.Filter.Eq("_id", key))
-//                    .FirstOrDefaultAsync()
-//                    .ConfigureAwait(false);
+        var result = await col.UpdateOneAsync(filter, update);
 
-//                if (doc is null) return Status.Error;
+        return Response.Ok(sizeBytes: size); 
+    }
 
-//                var fields = doc.GetValue("fields", null)?.AsBsonDocument;
-//                return (fields != null && fields.ElementCount > 0) ? Status.Ok : Status.Error;
-//            }
-//            catch
-//            {
-//                return Status.Error;
-//            }
-//        }
+    public async Task<Response<object>> Update(string table, string key, Dictionary<string, string> values)
+    {
+        var col = _db.GetCollection<BsonDocument>(table);
 
-//        public async Task<Status> ReadLatest()
-//        {
-//            try
-//            {
-//                var doc = await _col
-//                    .Find(FilterDefinition<BsonDocument>.Empty)
-//                    .Sort(Builders<BsonDocument>.Sort.Descending("createdAt"))
-//                    .Limit(1)
-//                    .FirstOrDefaultAsync()
-//                    .ConfigureAwait(false);
+        var filter = MongoDbHelper.BuildFilter(key);
 
-//                if (doc is null) return Status.Error;
+        var existing = await col.Find(filter).FirstOrDefaultAsync();
 
-//                var fields = doc.GetValue("fields", null)?.AsBsonDocument;
-//                return (fields != null && fields.ElementCount > 0) ? Status.Ok : Status.Error;
-//            }
-//            catch
-//            {
-//                return Status.Error;
-//            }
-//        }
+        if (existing == null)
+            return Response.Fail();
 
-//        public async Task<Status> Scan(string startKey, int count)
-//        {
-//            try
-//            {
-//                var filter = Builders<BsonDocument>.Filter.Gte("_id", startKey);
+        var size = MongoDbHelper.GetSize(existing);
 
-//                var docs = await _col
-//                    .Find(filter)
-//                    .Sort(Builders<BsonDocument>.Sort.Ascending("_id"))
-//                    .Limit(count)
-//                    .ToListAsync()
-//                    .ConfigureAwait(false);
+        var updates = values
+            .Select(kv =>
+                Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
+            ).ToList();
 
-//                if (docs.Count == 0) return Status.Error;
+        updates.Add(Builders<BsonDocument>.Update.Set("updatedAt", DateTime.UtcNow));
 
-//                var hasAnyFields = docs.Any(d => d.GetValue("fields", null)?.AsBsonDocument?.ElementCount > 0);
-//                return hasAnyFields ? Status.Ok : Status.Error;
-//            }
-//            catch
-//            {
-//                return Status.Error;
-//            }
-//        }
+        var update = Builders<BsonDocument>.Update.Combine(updates);
 
-//        public async Task<Status> Update(string key, Dictionary<string, string> values)
-//        {
-//            try
-//            {
-//                var updateFields = new BsonDocument(values.Select(kv =>
-//                    new BsonElement($"fields.{kv.Key}", kv.Value ?? string.Empty)));
+        var result = await col.UpdateOneAsync(filter, update);
 
-//                var update = new UpdateDefinitionBuilder<BsonDocument>()
-//                    .SetOnInsert("createdAt", DateTime.UtcNow)
-//                    .Set("updatedAt", DateTime.UtcNow)
-//                    .Inc("_touch", 1);
+        return Response.Ok(sizeBytes: size);
+    }
 
-//                foreach (var elem in updateFields.Elements)
-//                    update = update.Set(elem.Name, elem.Value);
+    public async Task<Response<object>> Read(string table, string key, HashSet<string> fields)
+    {
+        var col = _db.GetCollection<BsonDocument>(table);
 
-//                var res = await _col.UpdateOneAsync(
-//                    Builders<BsonDocument>.Filter.Eq("_id", key),
-//                    update,
-//                    new UpdateOptions { IsUpsert = true }
-//                ).ConfigureAwait(false);
+        var filter = MongoDbHelper.BuildFilter(key);
 
-//                return Status.Ok;
-//            }
-//            catch
-//            {
-//                return Status.Error;
-//            }
-//        }
-//    }
-//}
+        if (fields == null || fields.Count == 0)
+        {
+            var result = await col.Find(filter).FirstOrDefaultAsync();
+
+            var size = MongoDbHelper.GetSize(result);
+
+            return Response.Ok(sizeBytes: size);
+        }
+        else
+        {
+            var projection = fields.Aggregate(
+                                Builders<BsonDocument>.Projection.Include("_id"),
+                                (p, f) => p.Include(f)
+                            );
+
+            var result = col
+                .Find(filter)
+                .Project<BsonDocument>(projection)
+                .FirstOrDefault();
+
+            var size = MongoDbHelper.GetSize(result);
+
+            return Response.Ok(sizeBytes: size);
+        }
+    }
+
+    public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> fields)
+    {
+        var col = _db.GetCollection<BsonDocument>(table);
+
+        var filter = MongoDbHelper.BuildFilter(startKey);
+
+        if (fields == null || fields.Count == 0)
+        {
+            var result = await col
+                  .Find(filter)
+                  .Sort(Builders<BsonDocument>.Sort.Ascending("_id"))
+                  .Limit(count)
+                  .ToListAsync();
+
+            var sizeBytes = result.Sum(MongoDbHelper.GetSize);
+
+            return Response.Ok(sizeBytes: sizeBytes);
+        }
+        else
+        {
+            var projection = fields.Aggregate(
+                Builders<BsonDocument>.Projection.Include("_id"), (p, f) => p.Include(f)
+            );
+
+            var result = await col
+                   .Find(filter)
+                   .Project<BsonDocument>(projection)
+                   .Sort(Builders<BsonDocument>.Sort.Ascending("_id"))
+                   .Limit(count)
+                   .ToListAsync();
+
+            var sizeBytes = result.Sum(MongoDbHelper.GetSize);
+
+            return Response.Ok(sizeBytes: sizeBytes);
+        }
+    }
+
+    public async Task<Response<object>> DeleteAllData()
+    {
+        var databases = _client.ListDatabaseNames().ToList();
+        foreach (var dbName in databases)
+        {
+            if (dbName == "admin" || dbName == "local" || dbName == "config")
+                continue;
+
+            await _client.DropDatabaseAsync(dbName);
+        }
+        return Response.Ok();
+    }
+
+    public async Task<Response<object>> BulkInsert(string table, Dictionary<string, Dictionary<string, string>> data)
+    {
+        var col = _db.GetCollection<BsonDocument>(table);
+        var now = DateTime.UtcNow;
+
+        var docs = data.Select(kvp => MongoDbHelper.BuildDocument(kvp.Key, kvp.Value, now))
+                       .ToList();
+
+        // MongoDB continues inserting the rest of the documents even if one fails
+        var opts = new InsertManyOptions { IsOrdered = false };
+
+        await col.InsertManyAsync(docs, opts).ConfigureAwait(false);
+
+        return Response.Ok();
+    }
+
+    public async Task<Response<object>> InitDb()
+    {
+        return Response.Ok();
+    }
+}
