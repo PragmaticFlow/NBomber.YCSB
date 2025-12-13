@@ -13,6 +13,7 @@ public class MongoDbYcsbClient : IDbYcsbClient
     private readonly IMongoDatabase _db;
     private readonly MongoClient _client;
     private readonly string databaseName = "ycsb";
+
     public MongoDbYcsbClient(Dictionary<string, string> props)
     {
         var url = YcsbCliArgs.TryGet(props, "mongodb.url", defaultValue: "mongodb://localhost:27017");
@@ -83,9 +84,7 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
         if (fields == null || fields.Count == 0)
         {
-            var result = await col
-                   .Find(filter)
-                   .FirstOrDefaultAsync();
+            var result = await col.Find(filter).FirstOrDefaultAsync();
 
             var size = MongoDbHelper.GetSize(result);
 
@@ -130,9 +129,8 @@ public class MongoDbYcsbClient : IDbYcsbClient
         else
         {
             var projection = fields.Aggregate(
-                                Builders<BsonDocument>.Projection.Include("_id"),
-                                (p, f) => p.Include(f)
-                            );
+                Builders<BsonDocument>.Projection.Include("_id"), (p, f) => p.Include(f)
+            );
 
             var result = await col
                    .Find(filter)
@@ -154,6 +152,7 @@ public class MongoDbYcsbClient : IDbYcsbClient
         {
             if (dbName == "admin" || dbName == "local" || dbName == "config")
                 continue;
+
             await _client.DropDatabaseAsync(dbName);
         }
         return Response.Ok();

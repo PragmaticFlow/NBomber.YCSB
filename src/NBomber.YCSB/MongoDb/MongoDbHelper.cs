@@ -5,7 +5,7 @@ namespace NBomber.YCSB.MongoDb;
 
 static class MongoDbHelper
 {
-    internal static BsonDocument BuildDocument(string key, Dictionary<string, string> values, DateTime now)
+    public static BsonDocument BuildDocument(string key, Dictionary<string, string> values, DateTime now)
     {
         return new BsonDocument
         {
@@ -18,12 +18,12 @@ static class MongoDbHelper
         };
     }
 
-    internal static FilterDefinition<BsonDocument> BuildFilter(string key)
+    public static FilterDefinition<BsonDocument> BuildFilter(string key)
     {
         return Builders<BsonDocument>.Filter.Eq("_id", key);
     }
 
-    internal static long GetSize(BsonDocument doc)
+    public static long GetSize(BsonDocument doc)
     {
         return doc.ToBson().Length;
     }
