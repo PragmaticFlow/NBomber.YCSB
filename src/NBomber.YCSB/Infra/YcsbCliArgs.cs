@@ -26,6 +26,9 @@ public class YcsbCliArgs
     [Option("fieldlength", Required = false, Default = 100, HelpText = "The size of each field (default: 100)")]
     public int FieldLength { get; set; }
 
+    [Option("zeropadding", Required = false, Default = 1, HelpText = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)")]
+    public int ZeroPadding { get; set; }
+
     [Option('p', "prop", Required = false, Separator = ';', HelpText = "Set a property (key=value). Repeat for multiple properties.")]
     public IEnumerable<string> Props { get; set; } = Enumerable.Empty<string>();
 

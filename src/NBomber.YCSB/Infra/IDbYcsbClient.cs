@@ -42,7 +42,7 @@ public interface IDbYcsbClient
     /// <returns>
     /// A <see cref="Response{T}"/> containing the retrieved record, if found.
     /// </returns>
-    Task<Response<object>> Read(string table, string key, HashSet<string> fields);
+    Task<Response<object>> Read(string table, string key, HashSet<string>? fields);
 
     /// <summary>
     /// Performs a scan operation starting at <paramref name="startKey"/> and reading sequential records.
@@ -57,7 +57,7 @@ public interface IDbYcsbClient
     /// <returns>
     /// A <see cref="Response{T}"/> containing the scanned records.
     /// </returns>
-    Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> fields);
+    Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string>? fields);
 
     /// <summary>
     /// Deletes all data from the underlying database or storage system.
