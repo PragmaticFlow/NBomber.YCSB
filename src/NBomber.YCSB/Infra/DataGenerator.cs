@@ -4,21 +4,13 @@ using NBomber.CSharp;
 
 namespace NBomber.YCSB.Infra;
 
-public class DataGenerator
+public class DataGenerator(YcsbCliArgs settings)
 {
-    private readonly int _recordCount;
-    private readonly int _zeroPadding;
-    private readonly int _fieldCount;
-    private readonly int _fieldLength;
+    private readonly int _recordCount = settings.RecordCount;
+    private readonly int _zeroPadding = settings.ZeroPadding;
+    private readonly int _fieldCount = settings.FieldCount;
+    private readonly int _fieldLength = settings.FieldLength;
     private readonly ThreadLocal<Faker> _faker = new(() => new Faker());
-
-    public DataGenerator(YcsbCliArgs settings)
-    {
-        _recordCount = settings.RecordCount;
-        _zeroPadding = settings.ZeroPadding;
-        _fieldCount = settings.FieldCount;
-        _fieldLength = settings.FieldLength;
-    }
 
     public string GetKeyZipf(IScenarioContext context)
     {

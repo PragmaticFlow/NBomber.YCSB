@@ -13,20 +13,19 @@ public class BaseScenario(IDbYcsbClient dbClient)
         var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
         var tableName = "test_table";
 
-        var gen = new DataGenerator(settings);
+        var dataGen = new DataGenerator(settings);
 
         var scenario = Scenario.Create(workloadDescription, async context =>
         {
-            var randomItem = context.Random.Choice(operations);
+            var operation = context.Random.Choice(operations);
+            var values = dataGen.CreateValues();
 
-            var values = gen.CreateValues();
-
-            switch (randomItem)
+            switch (operation)
             {
                 case OperationType.Insert:
                     await Step.Run("insert", context, async () =>
                     {
-                        var key = gen.GetKeyUniform(context);
+                        var key = dataGen.GetKeyUniform(context);
                         return await dbClient.Insert(table: tableName, key, values);
                     });
                     break;
@@ -34,7 +33,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
                 case OperationType.Read:
                     await Step.Run("read", context, async () =>
                     {
-                        var key = gen.GetKeyZipf(context);
+                        var key = dataGen.GetKeyZipf(context);
                         return await dbClient.Read(table: tableName, key, null);
                     });
                     break;
@@ -42,7 +41,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
                 case OperationType.Update:
                     await Step.Run("update", context, async () =>
                     {
-                        var key = gen.GetKeyZipf(context);
+                        var key = dataGen.GetKeyZipf(context);
                         return await dbClient.Update(table: tableName, key, values);
                     });
                     break;
@@ -50,7 +49,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
                 case OperationType.Scan:
                     await Step.Run("scan", context, async () =>
                     {
-                        var key = gen.GetKeyZipf(context);
+                        var key = dataGen.GetKeyZipf(context);
                         var recordScan = context.Random.Next(1, 10);
                         return await dbClient.Scan(table: tableName, key, recordScan, null);
                     });
@@ -62,7 +61,7 @@ public class BaseScenario(IDbYcsbClient dbClient)
             await dbClient.DeleteAllData();
             dbClient.InitDb();
 
-            var list = gen.GenerateRandoms();
+            var list = dataGen.GenerateRandoms();
 
             await dbClient.BulkInsert(tableName, list);
         })
