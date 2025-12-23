@@ -20,13 +20,13 @@ public enum Workload
     /// </summary>
     C,
 
-    ///// <summary>
-    ///// Read-latest workload, typically targeting recently inserted keys.
-    ///// </summary>
-    //D,
+    /// <summary>
+    /// Read-latest workload, typically targeting recently inserted keys.
+    /// </summary>
+    D,
 
     /// <summary>
-    /// Short-range workload performing scans with occasional inserts.
+    /// Short-range workload performing scans with occasional inserts.(95% scan, 5% inserts)
     /// </summary>
     E
 }
@@ -45,6 +45,11 @@ public enum OperationType
     /// Represents a read operation.
     /// </summary>
     Read,
+
+    /// <summary>
+    /// Represents a read latest operation.
+    /// </summary>
+    ReadLatest,
 
     /// <summary>
     /// Represents an update operation.
@@ -88,7 +93,7 @@ public static class WorkloadManager
             Workload.A => [(OperationType.Insert, 50), (OperationType.Read, 50)],
             Workload.B => [(OperationType.Read, 95), (OperationType.Update, 5)],
             Workload.C => [(OperationType.Read, 100)],
-            //Workload.D => [(OperationType.ReadLatest, 95), (OperationType.Insert, 5)],
+            Workload.D => [(OperationType.ReadLatest, 95), (OperationType.Insert, 5)],
             Workload.E => [(OperationType.Scan, 95), (OperationType.Insert, 5)],
             _ => throw new ArgumentOutOfRangeException(nameof(workload), workload, null)
         };
@@ -106,7 +111,7 @@ public static class WorkloadManager
             Workload.A => "Update Heavy",
             Workload.B => "Read Heavy",
             Workload.C => "Read Only",
-            //Workload.D => "Read Latest",
+            Workload.D => "Read Latest",
             Workload.E => "Short Range",
             _ => ""
         };

@@ -9,7 +9,7 @@ public class YcsbCliArgs
     public Workload Workload { get; set; }
 
     [Option("recordcount", Required = false, Default = 1000, HelpText = "Number of records to insert")]
-    public int RecordCount { get; set; }
+    public long RecordCount { get; set; }
 
     [Option("operationcount", Required = false, Default = 1000, HelpText = "Number of operations to execute")]
     public int OperationCount { get; set; }
