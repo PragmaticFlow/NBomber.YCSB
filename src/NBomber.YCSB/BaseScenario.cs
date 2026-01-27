@@ -25,7 +25,7 @@ public class BaseScenario(IDbYcsbClient ycsbClient)
                 case OperationType.Insert:
                     await Step.Run("insert", context, async () =>
                     {
-                        var key = dataGen.GetKeyUniform(context);
+                        var key = dataGen.GetKeyNext();
                         return await ycsbClient.Insert(table: tableName, key, values);
                     });
                     break;
@@ -34,6 +34,14 @@ public class BaseScenario(IDbYcsbClient ycsbClient)
                     await Step.Run("read", context, async () =>
                     {
                         var key = dataGen.GetKeyZipf(context);
+                        return await ycsbClient.Read(table: tableName, key, null);
+                    });
+                    break;
+                
+                case OperationType.ReadLatest:
+                    await Step.Run("read latest", context, async () =>
+                    {
+                        var key = dataGen.GetKeyLatest(context);
                         return await ycsbClient.Read(table: tableName, key, null);
                     });
                     break;
@@ -64,6 +72,8 @@ public class BaseScenario(IDbYcsbClient ycsbClient)
             var list = dataGen.GenerateRandoms();
 
             await ycsbClient.BulkInsert(tableName, list);
+
+            dataGen.SetRecordCount(settings.RecordCount);
         })
         .WithWarmUpDuration(TimeSpan.FromSeconds(3));
 

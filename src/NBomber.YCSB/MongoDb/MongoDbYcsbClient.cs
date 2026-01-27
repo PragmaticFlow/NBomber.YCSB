@@ -26,27 +26,13 @@ public class MongoDbYcsbClient : IDbYcsbClient
     {
         var col = _db.GetCollection<BsonDocument>(table);
 
-        var filter = MongoDbHelper.BuildFilter(key);
+        var doc = MongoDbHelper.BuildDocument(key, values, DateTime.UtcNow);
 
-        var existing = await col.Find(filter).FirstOrDefaultAsync();
+        await col.InsertOneAsync(doc);
 
-        if (existing == null)
-            return Response.Fail();
+        var size = MongoDbHelper.GetSize(doc);
 
-        var size = MongoDbHelper.GetSize(existing);
-
-        var updates = values
-            .Select(kv =>
-                Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
-            ).ToList();
-
-        updates.Add(Builders<BsonDocument>.Update.Set("updatedAt", DateTime.UtcNow));
-
-        var update = Builders<BsonDocument>.Update.Combine(updates);
-
-        var result = await col.UpdateOneAsync(filter, update);
-
-        return Response.Ok(sizeBytes: size); 
+        return Response.Ok(sizeBytes: size);
     }
 
     public async Task<Response<object>> Update(string table, string key, Dictionary<string, string> values)
