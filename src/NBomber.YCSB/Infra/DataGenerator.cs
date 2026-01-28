@@ -50,7 +50,7 @@ public class DataGenerator(YcsbCliArgs settings)
 
         var rundom = context.Random.Zipf((int)min, theta);
         var offset = rundom - 1;
-        var keyNum = max - offset;
+        var offset = (ulong)(sample - 1);
 
         if (keyNum < 1) keyNum = 1;
 
