@@ -28,7 +28,7 @@ Parser.Default.ParseArguments<YcsbCliArgs>(args)
 
        var client = GetYcsbClient(settings);
 
-       var scenario = new BaseScenario(client);
+       var scenario = new YcsbScenario(client);
        scenario.Run(settings);
    })
    .WithNotParsed(errors =>

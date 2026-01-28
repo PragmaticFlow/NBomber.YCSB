@@ -1,6 +1,7 @@
 ﻿using Bogus;
 using NBomber.Contracts;
 using NBomber.CSharp;
+using Standart.Hash.xxHash;
 
 namespace NBomber.YCSB.Infra;
 
@@ -9,17 +10,15 @@ public class DataGenerator(YcsbCliArgs settings)
     private readonly int _zeroPadding = settings.ZeroPadding;
     private readonly int _fieldCount = settings.FieldCount;
     private readonly int _fieldLength = settings.FieldLength;
+    private readonly bool _orderedInserts = settings.InsertOrder.Equals("ordered", StringComparison.OrdinalIgnoreCase);
     private readonly ThreadLocal<Faker> _faker = new(() => new Faker());
     
-    private long _recordCount = settings.RecordCount;
+    private ulong _recordCount = settings.RecordCount;
 
-    public void SetRecordCount(long insertedCount)
+    public void SetRecordCount(ulong insertedCount)
     {
         _recordCount = insertedCount;
-    } 
-
-    public long NextInsertId()
-       => Interlocked.Increment(ref _recordCount);
+    }  
 
     public string GetKeyNext()
     {
@@ -30,29 +29,23 @@ public class DataGenerator(YcsbCliArgs settings)
     public string GetKeyZipf(IScenarioContext context)
     {
         var keyNum = context.Random.Zipf((int)_recordCount, 1.3);
-        return BuildKeyName(keyNum, _zeroPadding);
-    }
-
-    public string GetKeyUniform(IScenarioContext context)
-    {
-        var keyNum = context.Random.Next(1, (int)_recordCount + 1);
-        return BuildKeyName(keyNum, _zeroPadding);
+        return BuildKeyName((ulong)keyNum, _zeroPadding);
     }
 
     public string GetKeyLatest(IScenarioContext context, double theta = 0.99)
     {
         var max = Interlocked.Read(ref _recordCount);
 
-        if (max <= 1)
-            return BuildKeyName(1, _zeroPadding);
+        if (max <= 1UL)
+            return BuildKeyName(1UL, _zeroPadding);
 
-        var min = Math.Min(max, long.MaxValue);
+        var min = Math.Min(max, int.MaxValue);
 
         var rundom = context.Random.Zipf((int)min, theta);
-        var offset = rundom - 1;
-        var offset = (ulong)(sample - 1);
 
-        if (keyNum < 1) keyNum = 1;
+        var offset = (ulong)(rundom - 1);
+
+        ulong keyNum = (max > offset) ? (max - offset) : 1UL;
 
         return BuildKeyName(keyNum, _zeroPadding);
     }
@@ -63,7 +56,7 @@ public class DataGenerator(YcsbCliArgs settings)
 
         var fields = GenerateFields();
 
-        for (int i = 1; i <= _recordCount; i++)
+        for (ulong i = 1; i <= _recordCount; i++)
         {
             var key = BuildKeyName(i, _zeroPadding);
             var fieldValues = new Dictionary<string, string>(fields.Length);
@@ -90,12 +83,25 @@ public class DataGenerator(YcsbCliArgs settings)
         return values;
     }
 
-    private string BuildKeyName(long keyNum, int zeroPadding)
+    private string BuildKeyName(ulong keyNum, int zeroPadding)
     {
-        var value = keyNum.ToString();
+        ulong keyValue = keyNum;
+        
+        if (!_orderedInserts)
+        {
+            keyValue = ConvertToXxHash64(keyNum);
+        }
+        
+        var value = keyValue.ToString();
         var fill = zeroPadding - value.Length;
 
         return "user" + new string('0', Math.Max(0, fill)) + value;
+    }
+
+    private ulong ConvertToXxHash64(ulong value)
+    {
+        byte[] bytes = BitConverter.GetBytes(value);
+        return xxHash64.ComputeHash(bytes);
     }
 
     private string GenerateFieldValue()

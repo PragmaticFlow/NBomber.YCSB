@@ -2,7 +2,7 @@
   "profiles": {
     "NBomber.YCSB": {
       "commandName": "Project",
-      "commandLineArgs": "run --workload D --recordcount 1000 --zeropadding 5 --db mongodb -p mongodb.url=\"mongodb://localhost:32768\""
+      "commandLineArgs": "run --workload B --recordcount 1000 --zeropadding 5 --db mongodb --insertorder 'ordered' -p mongodb.url=\"mongodb://localhost:32768\""
     }
   }
 }
