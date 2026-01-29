@@ -9,7 +9,7 @@ public class YcsbCliArgs
     public Workload Workload { get; set; }
 
     [Option("recordcount", Required = false, Default = 1000, HelpText = "Number of records to insert")]
-    public long RecordCount { get; set; }
+    public ulong RecordCount { get; set; }
 
     [Option("operationcount", Required = false, Default = 1000, HelpText = "Number of operations to execute")]
     public int OperationCount { get; set; }
@@ -28,6 +28,9 @@ public class YcsbCliArgs
 
     [Option("zeropadding", Required = false, Default = 1, HelpText = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)")]
     public int ZeroPadding { get; set; }
+
+    [Option("insertorder", Required = false, Default = "hashed", HelpText = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)")]
+    public required string InsertOrder { get; set; }
 
     [Option('p', "prop", Required = false, Separator = ';', HelpText = "Set a property (key=value). Repeat for multiple properties.")]
     public IEnumerable<string> Props { get; set; } = Enumerable.Empty<string>();

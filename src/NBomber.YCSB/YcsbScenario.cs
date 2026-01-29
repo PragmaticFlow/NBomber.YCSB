@@ -5,7 +5,7 @@ using NBomber.YCSB.Infra;
 
 namespace NBomber.YCSB;
 
-public class BaseScenario(IDbYcsbClient ycsbClient) 
+public class YcsbScenario(IDbYcsbClient ycsbClient) 
 {
     public void Run(YcsbCliArgs settings)
     {
