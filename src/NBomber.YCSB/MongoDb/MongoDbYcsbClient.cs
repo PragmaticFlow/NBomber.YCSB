@@ -164,4 +164,9 @@ public class MongoDbYcsbClient : IDbYcsbClient
     {
         return Response.Ok();
     }
+
+    public async Task<Response<object>> CleanUp()
+    {
+        return Response.Ok();
+    }
 }

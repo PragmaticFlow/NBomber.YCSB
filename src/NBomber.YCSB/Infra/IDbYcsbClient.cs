@@ -87,4 +87,13 @@ public interface IDbYcsbClient
     /// A <see cref="Response{T}"/> describing the initialization result.
     /// </returns>
     Task<Response<object>> InitDb();
+
+    /// <summary>
+    /// Closes the database connection and releases any associated resources.
+    /// Typically used for cleanup after workloads complete.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Response{T}"/> describing the closure result.
+    /// </returns>
+    Task<Response<object>> CleanUp();
 }

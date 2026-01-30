@@ -90,7 +90,7 @@ public static class WorkloadManager
     {
         return workload switch
         {
-            Workload.A => [(OperationType.Insert, 50), (OperationType.Read, 50)],
+            Workload.A => [(OperationType.Read, 50), (OperationType.Update, 50)],
             Workload.B => [(OperationType.Read, 95), (OperationType.Update, 5)],
             Workload.C => [(OperationType.Read, 100)],
             Workload.D => [(OperationType.ReadLatest, 95), (OperationType.Insert, 5)],

@@ -187,4 +187,9 @@ public class RedisYcsbClient : IDbYcsbClient
     {
         return Response.Ok();
     }
+
+    public async Task<Response<object>> CleanUp()
+    {
+        return Response.Ok();
+    }
 }
