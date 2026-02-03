@@ -64,7 +64,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                         var key = dataGen.GetKeyZipf(context);
                         var fields = dataGen.GetFieldsName();
                         var recordScan = context.Random.Next(1, 10);
-                        
+
                         return await ycsbClient.Scan(table: tableName, key, recordScan, fields);
                     });
                     break;
@@ -82,12 +82,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
             dataGen.SetRecordCount(settings.RecordCount);
         })
-        .WithWarmUpDuration(TimeSpan.FromSeconds(3))
-        .WithClean(async context =>
-        {
-            ycsbClient.CleanUp();
-            await Task.CompletedTask;
-        });
+        .WithWarmUpDuration(TimeSpan.FromSeconds(3));
 
         var runner = NBomberRunner
                .RegisterScenarios(scenario)

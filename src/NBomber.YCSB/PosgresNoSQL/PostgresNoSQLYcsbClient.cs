@@ -290,10 +290,5 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             return Response.Fail();
         }
     }
-
-    public Task<Response<object>> CleanUp()
-    {
-        return Task.FromResult(Response.Ok());
-    }
 }
 
