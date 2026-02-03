@@ -1,5 +1,4 @@
-﻿using NATS.Client;
-using NBomber.Contracts;
+﻿using NBomber.Contracts;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
@@ -11,9 +10,6 @@ namespace NBomber.YCSB.PosgresNoSQL;
 
 public class PostgresNoSQLYcsbClient : IDbYcsbClient
 {
-    private static int _initCount = 0;
-    private static readonly Lock _lockObject = new();
-    private static NpgsqlConnection? _connection;
     private static string? _connectionString;
 
     public const string PRIMARY_KEY = "ycsb_key";
@@ -22,52 +18,36 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
     public PostgresNoSQLYcsbClient(Dictionary<string, string> props)
     {
+        if (_connectionString != null)
+            return;
+
         var host = YcsbCliArgs.TryGet(props, "postgres.host", defaultValue: "localhost");
         var port = YcsbCliArgs.TryGet(props, "postgres.port", defaultValue: "5432");
         var database = YcsbCliArgs.TryGet(props, "postgres.database", defaultValue: "test");
         var user = YcsbCliArgs.TryGet(props, "postgres.user", defaultValue: "postgres");
         var password = YcsbCliArgs.TryGet(props, "postgres.password", "postgres");
 
-        Interlocked.Increment(ref _initCount);
-
-        lock (_lockObject)
+        var builder = new NpgsqlConnectionStringBuilder
         {
-            if (_connection != null)
-            {
-                return; // Already initialized by another thread
-            }
+            Host = host,
+            Port = int.Parse(port),
+            Database = database,
+            Username = user,
+            Password = password,
+            MinPoolSize = 1,
+            MaxPoolSize = 50
+        };
 
-            try
-            {
-                var builder = new NpgsqlConnectionStringBuilder
-                {
-                    Host = host,
-                    Port = int.Parse(port),
-                    Database = database,
-                    Username = user,
-                    Password = password,
-                    Pooling = true,
-                    MinPoolSize = 1,
-                    MaxPoolSize = 50
-                };
-
-                _connectionString = builder.ConnectionString;
-                _connection = new NpgsqlConnection(_connectionString);
-                _connection.Open();
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error during connection: {ex.Message}");
-                throw;
-            }
-        }
-
+        _connectionString = builder.ConnectionString;
     }
 
     public async Task<Response<object>> InitDb()
     {
         try
         {
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
             string checkTableSql = $@"
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables
@@ -75,28 +55,27 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                         AND table_name = '{TABLE_NAME}'
                     )";
 
-            using (var checkCmd = new NpgsqlCommand(checkTableSql, _connection))
+            using var checkCmd = new NpgsqlCommand(checkTableSql, conn);
+
+            bool exists = (bool)await checkCmd.ExecuteScalarAsync();
+
+            if (!exists)
             {
-                bool exists = (bool)await checkCmd.ExecuteScalarAsync();
+                string createTableAndIndexSql = $@"
+                    CREATE TABLE {TABLE_NAME} (
+                        {PRIMARY_KEY} VARCHAR(255) PRIMARY KEY NOT NULL,
+                        {COLUMN_NAME} JSONB NOT NULL
+                    );
 
-                if (!exists)
+                    CREATE INDEX idx_{TABLE_NAME}_jsonb
+                    ON {TABLE_NAME} USING GIN ({COLUMN_NAME});";
+
+                using (var cmd = new NpgsqlCommand(createTableAndIndexSql, conn))
                 {
-                    string createTableAndIndexSql = $@"
-                        CREATE TABLE {TABLE_NAME} (
-                            {PRIMARY_KEY} VARCHAR(255) PRIMARY KEY NOT NULL,
-                            {COLUMN_NAME} JSONB NOT NULL
-                        );
-        
-                        CREATE INDEX idx_{TABLE_NAME}_jsonb
-                        ON {TABLE_NAME} USING GIN ({COLUMN_NAME});";
-
-                    using (var cmd = new NpgsqlCommand(createTableAndIndexSql, _connection))
-                    {
-                        await cmd.ExecuteNonQueryAsync();
-                    }
+                    await cmd.ExecuteNonQueryAsync();
                 }
-
             }
+
             return Response.Ok();
         }
         catch (Exception ex)
@@ -114,17 +93,19 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             INSERT INTO {TABLE_NAME} ({PRIMARY_KEY}, {COLUMN_NAME})
             VALUES (@key, @json::jsonb)";
 
-        using (var cmd = new NpgsqlCommand(sql, _connection))
-        {
-            cmd.Parameters.AddWithValue("@key", key);
-            cmd.Parameters.AddWithValue("@json", jsonValue);
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
 
-            await cmd.ExecuteNonQueryAsync();
+        using var cmd = new NpgsqlCommand(sql, conn);
 
-            var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+        cmd.Parameters.AddWithValue("@key", key);
+        cmd.Parameters.AddWithValue("@json", jsonValue);
 
-            return Response.Ok(sizeBytes: sizeBytes);
-        }
+        await cmd.ExecuteNonQueryAsync();
+
+        var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+
+        return Response.Ok(sizeBytes: sizeBytes);
     }
 
     public async Task<Response<object>> Read(string table, string key, HashSet<string>? fields)
@@ -149,22 +130,24 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                 WHERE {PRIMARY_KEY} = @key";
         }
 
-        using (var cmd = new NpgsqlCommand(sql, _connection))
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        using var cmd = new NpgsqlCommand(sql, conn);
+
+        cmd.Parameters.AddWithValue("@key", key);
+
+        var result = await cmd.ExecuteScalarAsync();
+
+        if (result == null || result == DBNull.Value)
         {
-            cmd.Parameters.AddWithValue("@key", key);
-
-            var result = await cmd.ExecuteScalarAsync();
-
-            if (result == null || result == DBNull.Value)
-            {
-                return Response.Fail();
-            }
-
-            string jsonValue = result.ToString();
-            var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
-
-            return Response.Ok(sizeBytes: sizeBytes);
+            return Response.Fail();
         }
+
+        string jsonValue = result.ToString();
+        var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+
+        return Response.Ok(sizeBytes: sizeBytes);
     }
 
     public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string>? fields)
@@ -193,26 +176,28 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                 LIMIT @count";
         }
 
-        using (var cmd = new NpgsqlCommand(sql, _connection))
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        using var cmd = new NpgsqlCommand(sql, conn);
+
+        cmd.Parameters.AddWithValue("@startKey", startKey);
+        cmd.Parameters.AddWithValue("@count", count);
+
+        var sizeBytes = 0L;
+
+        using (var reader = await cmd.ExecuteReaderAsync())
         {
-            cmd.Parameters.AddWithValue("@startKey", startKey);
-            cmd.Parameters.AddWithValue("@count", count);
-
-            var sizeBytes = 0L;
-
-            using (var reader = await cmd.ExecuteReaderAsync())
+            while (await reader.ReadAsync())
             {
-                while (await reader.ReadAsync())
-                {
-                    var key = reader.GetString(0);
-                    var jsonValue = reader.GetValue(1)?.ToString() ?? "";
+                var key = reader.GetString(0);
+                var jsonValue = reader.GetValue(1)?.ToString() ?? "";
 
-                    sizeBytes += PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
-                }
+                sizeBytes += PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
             }
-
-            return Response.Ok(sizeBytes: sizeBytes);
         }
+
+        return Response.Ok(sizeBytes: sizeBytes);
     }
 
     public async Task<Response<object>> Update(string table, string key, Dictionary<string, string> values)
@@ -224,18 +209,21 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             SET {COLUMN_NAME} = @json::jsonb
             WHERE {PRIMARY_KEY} = @key";
 
-        using (var cmd = new NpgsqlCommand(sql, _connection))
-        {
-            cmd.Parameters.AddWithValue("@key", key);
-            cmd.Parameters.AddWithValue("@json", jsonValue);
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
 
-            await cmd.ExecuteNonQueryAsync();
+        using var cmd = new NpgsqlCommand(sql, conn);
 
-            var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+        cmd.Parameters.AddWithValue("@key", key);
+        cmd.Parameters.AddWithValue("@json", jsonValue);
 
-            return Response.Ok(sizeBytes: sizeBytes);
-        }
+        await cmd.ExecuteNonQueryAsync();
+
+        var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+
+        return Response.Ok(sizeBytes: sizeBytes);
     }
+
     public async Task<Response<object>> BulkInsert(string table, Dictionary<string, Dictionary<string, string>> data)
     {
         try
@@ -287,10 +275,12 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         {
             string sql = $"TRUNCATE TABLE {TABLE_NAME}";
 
-            using (var cmd = new NpgsqlCommand(sql, _connection))
-            {
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+
+            await cmd.ExecuteNonQueryAsync();
 
             return Response.Ok();
         }
@@ -301,21 +291,9 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         }
     }
 
-    public async Task<Response<object>> CleanUp()
+    public Task<Response<object>> CleanUp()
     {
-        if (Interlocked.Decrement(ref _initCount) == 0)
-        {
-            lock (_lockObject)
-            {
-                if (_connection != null)
-                {
-                    _connection.Close();
-                    _connection.Dispose();
-                    _connection = null;
-                }
-            }
-        }
-        return Response.Ok();
+        return Task.FromResult(Response.Ok());
     }
 }
 

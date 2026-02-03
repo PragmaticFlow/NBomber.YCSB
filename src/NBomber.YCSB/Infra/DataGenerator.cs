@@ -86,7 +86,7 @@ public class DataGenerator(YcsbCliArgs settings)
 
     public HashSet<string>? GetFieldsName()
     {
-        if(!_readallfields)
+        if (!_readallfields)
         {
             var randomFieldIndex = _faker.Value!.Random.Int(1, _fieldCount);
             return new HashSet<string> { $"field{randomFieldIndex}" };
@@ -121,7 +121,7 @@ public class DataGenerator(YcsbCliArgs settings)
         return _faker.Value!.Random.String2(_fieldLength, "abcdefghijklmnopqrstuvwxyz");
     }
 
-    private string[]GenerateFields()
+    private string[] GenerateFields()
     {
         return Enumerable.Range(1, _fieldCount)
             .Select(i => $"field{i}")

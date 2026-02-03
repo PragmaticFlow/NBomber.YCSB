@@ -85,7 +85,6 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         .WithWarmUpDuration(TimeSpan.FromSeconds(3))
         .WithClean(async context =>
         {
-            //await ycsbClient.DeleteAllData();
             ycsbClient.CleanUp();
             await Task.CompletedTask;
         });
