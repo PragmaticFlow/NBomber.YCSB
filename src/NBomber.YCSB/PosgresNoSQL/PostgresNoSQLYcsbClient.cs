@@ -35,7 +35,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             Username = user,
             Password = password,
             MinPoolSize = 1,
-            MaxPoolSize = 50
+            MaxPoolSize = 100
         };
 
         _connectionString = builder.ConnectionString;
