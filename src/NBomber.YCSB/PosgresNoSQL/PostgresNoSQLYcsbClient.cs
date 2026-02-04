@@ -19,9 +19,6 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
     public PostgresNoSQLYcsbClient(Dictionary<string, string> props)
     {
-        if (_dataSource != null)
-            return;
-
         var host = YcsbCliArgs.TryGet(props, "postgres.host", defaultValue: "localhost");
         var port = YcsbCliArgs.TryGet(props, "postgres.port", defaultValue: "5432");
         var database = YcsbCliArgs.TryGet(props, "postgres.database", defaultValue: "test");
@@ -70,10 +67,9 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                     CREATE INDEX idx_{TABLE_NAME}_jsonb
                     ON {TABLE_NAME} USING GIN ({COLUMN_NAME});";
 
-                using (var cmd = new NpgsqlCommand(createTableAndIndexSql, conn))
-                {
-                    await cmd.ExecuteNonQueryAsync();
-                }
+                using var cmd = new NpgsqlCommand(createTableAndIndexSql, conn);
+                
+                await cmd.ExecuteNonQueryAsync();
             }
 
             return Response.Ok();
@@ -183,15 +179,14 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
         var sizeBytes = 0L;
 
-        using (var reader = await cmd.ExecuteReaderAsync())
+        using var reader = await cmd.ExecuteReaderAsync();
+     
+        while (await reader.ReadAsync())
         {
-            while (await reader.ReadAsync())
-            {
-                var key = reader.GetString(0);
-                var jsonValue = reader.GetValue(1)?.ToString() ?? "";
+            var key = reader.GetString(0);
+            var jsonValue = reader.GetValue(1)?.ToString() ?? "";
 
-                sizeBytes += Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
-            }
+            sizeBytes += Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
         }
 
         return Response.Ok(sizeBytes: sizeBytes);
