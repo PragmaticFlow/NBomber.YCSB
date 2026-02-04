@@ -135,7 +135,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
         if (result == null || result == DBNull.Value)
         {
-            return Response.Fail();
+            return Response.Fail(statusCode: "no data");
         }
 
         string jsonValue = result.ToString();
@@ -276,7 +276,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error during delete all data: {ex.Message}");
-            return Response.Fail();
+            return Response.Fail(statusCode: "data clean failed");
         }
     }
 }

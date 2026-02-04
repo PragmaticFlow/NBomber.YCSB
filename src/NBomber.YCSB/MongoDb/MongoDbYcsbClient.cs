@@ -44,7 +44,7 @@ public class MongoDbYcsbClient : IDbYcsbClient
         var existing = await col.Find(filter).FirstOrDefaultAsync();
 
         if (existing == null)
-            return Response.Fail();
+            return Response.Fail(statusCode: "no data");
 
         var size = MongoDbHelper.GetSize(existing);
 
