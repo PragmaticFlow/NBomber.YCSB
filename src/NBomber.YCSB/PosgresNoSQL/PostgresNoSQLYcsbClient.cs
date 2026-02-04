@@ -4,13 +4,14 @@ using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
 using Npgsql;
 using Spectre.Console;
+using System.Text;
 using System.Text.Json;
 
 namespace NBomber.YCSB.PosgresNoSQL;
 
 public class PostgresNoSQLYcsbClient : IDbYcsbClient
 {
-    private static string? _connectionString;
+    private static NpgsqlDataSource? _dataSource;
 
     public const string PRIMARY_KEY = "ycsb_key";
     public const string COLUMN_NAME = "ycsb_value";
@@ -18,7 +19,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
     public PostgresNoSQLYcsbClient(Dictionary<string, string> props)
     {
-        if (_connectionString != null)
+        if (_dataSource != null)
             return;
 
         var host = YcsbCliArgs.TryGet(props, "postgres.host", defaultValue: "localhost");
@@ -38,15 +39,14 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             MaxPoolSize = 100
         };
 
-        _connectionString = builder.ConnectionString;
+        _dataSource = NpgsqlDataSource.Create(builder);
     }
 
     public async Task<Response<object>> InitDb()
     {
         try
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
+            await using var conn = await _dataSource.OpenConnectionAsync();
 
             string checkTableSql = $@"
                     SELECT EXISTS (
@@ -93,8 +93,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             INSERT INTO {TABLE_NAME} ({PRIMARY_KEY}, {COLUMN_NAME})
             VALUES (@key, @json::jsonb)";
 
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync();
+        await using var conn = await _dataSource.OpenConnectionAsync();
 
         using var cmd = new NpgsqlCommand(sql, conn);
 
@@ -103,7 +102,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
         await cmd.ExecuteNonQueryAsync();
 
-        var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+        var sizeBytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
 
         return Response.Ok(sizeBytes: sizeBytes);
     }
@@ -130,8 +129,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                 WHERE {PRIMARY_KEY} = @key";
         }
 
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync();
+        await using var conn = await _dataSource.OpenConnectionAsync();
 
         using var cmd = new NpgsqlCommand(sql, conn);
 
@@ -145,7 +143,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         }
 
         string jsonValue = result.ToString();
-        var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+        var sizeBytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
 
         return Response.Ok(sizeBytes: sizeBytes);
     }
@@ -176,8 +174,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                 LIMIT @count";
         }
 
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync();
+        await using var conn = await _dataSource.OpenConnectionAsync();
 
         using var cmd = new NpgsqlCommand(sql, conn);
 
@@ -193,7 +190,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                 var key = reader.GetString(0);
                 var jsonValue = reader.GetValue(1)?.ToString() ?? "";
 
-                sizeBytes += PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+                sizeBytes += Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
             }
         }
 
@@ -209,8 +206,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             SET {COLUMN_NAME} = @json::jsonb
             WHERE {PRIMARY_KEY} = @key";
 
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync();
+        await using var conn = await _dataSource.OpenConnectionAsync();
 
         using var cmd = new NpgsqlCommand(sql, conn);
 
@@ -219,7 +215,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
         await cmd.ExecuteNonQueryAsync();
 
-        var sizeBytes = PostgresNoSQLHelper.GetSize(key) + PostgresNoSQLHelper.GetSize(jsonValue);
+        var sizeBytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
 
         return Response.Ok(sizeBytes: sizeBytes);
     }
@@ -235,8 +231,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             var tasks = chunks.Select(async chunk =>
             {
                 // Each task gets its own connection from the pool
-                await using var conn = new NpgsqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await using var conn = await _dataSource.OpenConnectionAsync();
 
                 var batch = new NpgsqlBatch(conn);
 
@@ -275,8 +270,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         {
             string sql = $"TRUNCATE TABLE {TABLE_NAME}";
 
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
+            await using var conn = await _dataSource.OpenConnectionAsync();
 
             using var cmd = new NpgsqlCommand(sql, conn);
 

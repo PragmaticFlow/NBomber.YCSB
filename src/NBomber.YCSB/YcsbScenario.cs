@@ -34,7 +34,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     await Step.Run("read", context, async () =>
                     {
                         var key = dataGen.GetKeyZipf(context);
-                        var fields = dataGen.GetFieldsName();
+                        var fields = dataGen.GetFieldNames();
 
                         return await ycsbClient.Read(table: tableName, key, fields);
                     });
@@ -44,7 +44,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     await Step.Run("read latest", context, async () =>
                     {
                         var key = dataGen.GetKeyLatest(context);
-                        var fields = dataGen.GetFieldsName();
+                        var fields = dataGen.GetFieldNames();
 
                         return await ycsbClient.Read(table: tableName, key, fields);
                     });
@@ -62,7 +62,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     await Step.Run("scan", context, async () =>
                     {
                         var key = dataGen.GetKeyZipf(context);
-                        var fields = dataGen.GetFieldsName();
+                        var fields = dataGen.GetFieldNames();
                         var recordScan = context.Random.Next(1, 10);
 
                         return await ycsbClient.Scan(table: tableName, key, recordScan, fields);
