@@ -57,8 +57,7 @@ public class RedisYcsbClient : IDbYcsbClient
 
         await _db.HashSetAsync(key, entries);
 
-        var index = int.Parse(key);
-        await _db.SortedSetAddAsync(INDEX_KEY, key, index);
+        await _db.SortedSetAddAsync(INDEX_KEY, key, 0);
             
         return Response.Ok(sizeBytes: size);
     }
@@ -106,15 +105,11 @@ public class RedisYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> fields)
     {
-        double startIndex = int.Parse(startKey);
-
-        var startRedisKey = AddKeyPrefix(startKey);
-
         // Query Redis Sorted Set to read keys in the specified range
-        var keys = await _db.SortedSetRangeByScoreAsync(
+        var keys = await _db.SortedSetRangeByValueAsync(
             INDEX_KEY,
-            start: startIndex,
-            stop: double.PositiveInfinity,
+            min: startKey,
+            max: default,
             Exclude.None,
             Order.Ascending,
             skip: 0,
@@ -128,7 +123,7 @@ public class RedisYcsbClient : IDbYcsbClient
 
         if (fields == null || fields.Count == 0)
         {
-            var tasks = keys.Select(k => _db.HashGetAllAsync((string)k));                        
+            var tasks = keys.Select(k => _db.HashGetAllAsync(AddKeyPrefix((string)k)));
 
             var entries = await Task.WhenAll(tasks);
                 
@@ -140,7 +135,7 @@ public class RedisYcsbClient : IDbYcsbClient
         {
             var redisFields = fields.Select(c => (RedisValue)c).ToArray();
 
-            var tasks = keys.Select(k => _db.HashGetAsync((string)k, redisFields));
+            var tasks = keys.Select(k => _db.HashGetAsync(AddKeyPrefix((string)k), redisFields));
 
             var values = await Task.WhenAll(tasks);
 
@@ -173,9 +168,7 @@ public class RedisYcsbClient : IDbYcsbClient
                 var entries = item.Value.Select(f => new HashEntry(f.Key, f.Value ?? string.Empty)).ToArray();
                     
                 tasks.Add(batch.HashSetAsync(redisKey, entries));
-
-                var index = int.Parse(item.Key);
-                tasks.Add(batch.SortedSetAddAsync(INDEX_KEY, redisKey, index));
+                tasks.Add(batch.SortedSetAddAsync(INDEX_KEY, item.Key, 0));
             }
                  
             batch.Execute();

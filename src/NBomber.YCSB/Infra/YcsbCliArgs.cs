@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using NATS.Client;
 
 namespace NBomber.YCSB.Infra;
 
@@ -19,6 +20,12 @@ public class YcsbCliArgs
 
     [Option("db", Required = false, HelpText = "Database type (redis, postgres, etc.)")]
     public string Db { get; set; }
+
+    [Option("copies", Required = false, Default = 1, HelpText = "The number of copies")]
+    public int Copies { get; set; }
+
+    [Option("duration", Required = false, Default = 60, HelpText = "Duration of test in sec (default: 60")]
+    public int Duration { get; set; }
 
     [Option("fieldcount", Required = false, Default = 10, HelpText = "The number of fields in a record (default: 10)")]
     public int FieldCount { get; set; }

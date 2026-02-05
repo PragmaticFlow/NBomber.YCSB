@@ -1,4 +1,5 @@
 ﻿#pragma warning disable CS4014
+using NATS.Client.Internals;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
@@ -7,7 +8,7 @@ namespace NBomber.YCSB;
 
 public class YcsbScenario(IDbYcsbClient ycsbClient) 
 {
-    public void Run(YcsbCliArgs settings)
+    public Contracts.Stats.NodeStats Run(YcsbCliArgs settings)
     {
         var operations = WorkloadManager.GetOperations(settings.Workload);
         var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
@@ -82,7 +83,10 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
             dataGen.SetRecordCount(settings.RecordCount);
         })
-        .WithWarmUpDuration(TimeSpan.FromSeconds(3));
+        .WithWarmUpDuration(TimeSpan.FromSeconds(3))
+        .WithLoadSimulations(
+            Simulation.KeepConstant(copies: settings.Copies, during: TimeSpan.FromSeconds(settings.Duration))
+            );
 
         var runner = NBomberRunner
                .RegisterScenarios(scenario)
@@ -95,6 +99,6 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             runner = runner.WithReportFileName(settings.ExportFile);
         }
 
-        runner.Run();
+        return runner.Run();
     }
 }

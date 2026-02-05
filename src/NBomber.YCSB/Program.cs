@@ -36,7 +36,7 @@ Parser.Default.ParseArguments<YcsbCliArgs>(args)
    {
        Console.WriteLine("Failed to parse command line options:");
        foreach (var error in errors)
-           Console.WriteLine($"  {error}");
+           Console.WriteLine($" {error}");
    });
 
 static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings) 
