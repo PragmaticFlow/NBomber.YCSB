@@ -88,7 +88,9 @@ public class RedisYcsbClient : IDbYcsbClient
 
             var sizeBytes = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(entries);
 
-            return entries.Length > 0 ? Response.Ok(sizeBytes: sizeBytes) : Response.Fail();
+            return entries.Length > 0 
+                ? Response.Ok(sizeBytes: sizeBytes) 
+                : Response.Fail(statusCode: "no data");
         }
         else
         {

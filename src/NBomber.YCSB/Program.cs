@@ -4,6 +4,7 @@ using NBomber.YCSB;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
 using NBomber.YCSB.MongoDb;
+using NBomber.YCSB.PosgresNoSQL;
 using NBomber.YCSB.Redis;
 
 Console.WriteLine("NBomber YCSB interactive console started.");
@@ -48,6 +49,8 @@ static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
             return new RedisYcsbClient(propsDict);
         case "mongodb":
             return new MongoDbYcsbClient(propsDict);
+        case "postgres":
+            return new PostgresNoSQLYcsbClient(propsDict);
         default: 
             throw new NotSupportedException($"Database '{settings.Db}' is not supported.");
     }
