@@ -1,5 +1,4 @@
 ﻿#pragma warning disable CS4014
-using NATS.Client.Internals;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
@@ -74,8 +73,8 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         })
         .WithInit(async context =>
         {
+            await ycsbClient.InitDb();
             await ycsbClient.DeleteAllData();
-            ycsbClient.InitDb();
 
             var list = dataGen.GenerateRandoms();
 
@@ -85,8 +84,8 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         })
         .WithWarmUpDuration(TimeSpan.FromSeconds(3))
         .WithLoadSimulations(
-            Simulation.KeepConstant(copies: settings.Copies, during: TimeSpan.FromSeconds(settings.Duration))
-            );
+            Simulation.IterationsForConstant(copies: settings.ThreadCount, iterations: (int)settings.RecordCount)
+        );
 
         var runner = NBomberRunner
                .RegisterScenarios(scenario)

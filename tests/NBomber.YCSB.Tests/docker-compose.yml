@@ -15,6 +15,42 @@
       timeout: 3s
       retries: 3
 
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    ports:
+      - "32768:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mysecretpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
 volumes:
   redis_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  postgres_data:
     driver: local
