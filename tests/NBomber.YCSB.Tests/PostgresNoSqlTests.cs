@@ -3,7 +3,7 @@ using NBomber.YCSB.PosgresNoSQL;
 
 namespace NBomber.YCSB.Tests
 {
-    public class PostgresNoSqlTests : IClassFixture<EnvContextFixture>
+    public class PostgresNoSqlTests
     {
         [Fact]
         public void Workload_A_Shold_Execute_50_Read_50_Update()

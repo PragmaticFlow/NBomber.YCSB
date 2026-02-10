@@ -123,7 +123,10 @@ public class RedisYcsbClient : IDbYcsbClient
 
         if (fields == null || fields.Count == 0)
         {
-            var tasks = keys.Select(k => _db.HashGetAllAsync(AddKeyPrefix((string)k)));
+            var tasks = keys.Select(k => {
+                var kPrefix = AddKeyPrefix((string)k);
+                return _db.HashGetAllAsync(kPrefix);
+            });
 
             var entries = await Task.WhenAll(tasks);
                 
@@ -135,7 +138,10 @@ public class RedisYcsbClient : IDbYcsbClient
         {
             var redisFields = fields.Select(c => (RedisValue)c).ToArray();
 
-            var tasks = keys.Select(k => _db.HashGetAsync(AddKeyPrefix((string)k), redisFields));
+            var tasks = keys.Select(k => {
+                var kPrefix = AddKeyPrefix((string)k);
+                return _db.HashGetAllAsync(kPrefix);
+            });
 
             var values = await Task.WhenAll(tasks);
 

@@ -3,7 +3,7 @@ using NBomber.YCSB.Redis;
 
 namespace NBomber.YCSB.Tests
 {
-    public class RedisTests : IClassFixture<EnvContextFixture>
+    public class RedisTests
     {        
         [Fact]
         public void Workload_A_Shold_Execute_50_Read_50_Update()
@@ -117,7 +117,6 @@ namespace NBomber.YCSB.Tests
                 OperationCount = 1000,
                 Db = "redis",
                 ThreadCount = 1,
-                Duration = 20,
                 FieldCount = 10,
                 FieldLength = 100,
                 ZeroPadding = 1,

@@ -3,7 +3,7 @@ using NBomber.YCSB.MongoDb;
 
 namespace NBomber.YCSB.Tests
 {
-    public class MongoDbTests : IClassFixture<EnvContextFixture>
+    public class MongoDbTests
     {
         [Fact]
         public void Workload_A_Shold_Execute_50_Read_50_Update()
@@ -117,7 +117,6 @@ namespace NBomber.YCSB.Tests
                 OperationCount = 1000,
                 Db = "mongodb",
                 ThreadCount = 1,
-                Duration = 20,
                 FieldCount = 5,
                 FieldLength = 100,
                 ZeroPadding = 5,
