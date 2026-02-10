@@ -6,7 +6,7 @@
 public enum Workload
 {
     /// <summary>
-    /// Update-heavy workload (50% inserts, 50% reads).
+    /// Update-heavy workload (50% reads, 50% updates).
     /// </summary>
     A,
 

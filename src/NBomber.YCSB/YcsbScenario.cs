@@ -7,7 +7,7 @@ namespace NBomber.YCSB;
 
 public class YcsbScenario(IDbYcsbClient ycsbClient) 
 {
-    public void Run(YcsbCliArgs settings)
+    public Contracts.Stats.NodeStats Run(YcsbCliArgs settings)
     {
         var operations = WorkloadManager.GetOperations(settings.Workload);
         var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
@@ -73,8 +73,8 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         })
         .WithInit(async context =>
         {
+            await ycsbClient.InitDb();
             await ycsbClient.DeleteAllData();
-            ycsbClient.InitDb();
 
             var list = dataGen.GenerateRandoms();
 
@@ -82,7 +82,10 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
             dataGen.SetRecordCount(settings.RecordCount);
         })
-        .WithWarmUpDuration(TimeSpan.FromSeconds(3));
+        .WithWarmUpDuration(TimeSpan.FromSeconds(3))
+        .WithLoadSimulations(
+            Simulation.IterationsForConstant(copies: settings.ThreadCount, iterations: (int)settings.RecordCount)
+        );
 
         var runner = NBomberRunner
                .RegisterScenarios(scenario)
@@ -95,6 +98,6 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             runner = runner.WithReportFileName(settings.ExportFile);
         }
 
-        runner.Run();
+        return runner.Run();
     }
 }

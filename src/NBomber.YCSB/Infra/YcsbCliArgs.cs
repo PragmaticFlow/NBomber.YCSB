@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using NATS.Client;
 
 namespace NBomber.YCSB.Infra;
 
@@ -20,13 +21,16 @@ public class YcsbCliArgs
     [Option("db", Required = false, HelpText = "Database type (redis, postgres, etc.)")]
     public string Db { get; set; }
 
+    [Option("threadcount", Required = false, Default = 1, HelpText = "The number of threads")]
+    public int ThreadCount { get; set; }
+
     [Option("fieldcount", Required = false, Default = 10, HelpText = "The number of fields in a record (default: 10)")]
     public int FieldCount { get; set; }
 
     [Option("fieldlength", Required = false, Default = 100, HelpText = "The size of each field (default: 100)")]
     public int FieldLength { get; set; }
 
-    [Option("readallfields", Required = false, Default = true, HelpText = "For deciding whether to read one field (false) or all fields (true)")]
+    [Option("readallfields", Required = false, Default = true, HelpText = "For deciding whether to read one field (false) or all fields (true) - (default: true)")]
     public bool ReadAllFields { get; set; }
 
     [Option("zeropadding", Required = false, Default = 1, HelpText = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)")]

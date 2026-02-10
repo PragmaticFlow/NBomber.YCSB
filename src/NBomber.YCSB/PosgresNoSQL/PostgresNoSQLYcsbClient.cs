@@ -68,7 +68,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                     ON {TABLE_NAME} USING GIN ({COLUMN_NAME});";
 
                 using var cmd = new NpgsqlCommand(createTableAndIndexSql, conn);
-                
+
                 await cmd.ExecuteNonQueryAsync();
             }
 
@@ -180,7 +180,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         var sizeBytes = 0L;
 
         using var reader = await cmd.ExecuteReaderAsync();
-     
+
         while (await reader.ReadAsync())
         {
             var key = reader.GetString(0);
@@ -263,7 +263,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         try
         {
-            string sql = $"TRUNCATE TABLE {TABLE_NAME}";
+            string sql = $"TRUNCATE TABLE IF EXISTS {TABLE_NAME}";
 
             await using var conn = await _dataSource.OpenConnectionAsync();
 
