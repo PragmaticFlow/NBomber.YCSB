@@ -1,0 +1,45 @@
+name: Build
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clear NuGet cache
+        run: dotnet nuget locals all --clear     
+
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+
+      # Docker Compose Up should go first, before any other step because of slow nodes on GitHub Actions
+      - name: Docker Compose Up
+        run: |
+          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml up -d
+
+      - name: Wait for healthy containers
+        run: |
+          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml wait --timeout 30 mongodb || true
+          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml wait --timeout 30 redis || true
+          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml wait --timeout 30 postgres || true
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build Nbomber.YCSB.sln
+
+      - name: Run tests
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj
