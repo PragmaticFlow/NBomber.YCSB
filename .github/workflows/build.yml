@@ -21,25 +21,34 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-
-      # Docker Compose Up should go first, before any other step because of slow nodes on GitHub Actions
-      - name: Docker Compose Up
-        run: |
-          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml up -d
-          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml up -d
-          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml up -d
-
-      - name: Wait for healthy containers
-        run: |
-          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml wait --timeout 30 mongodb || true
-          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml wait --timeout 30 redis || true
-          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml wait --timeout 30 postgres || true
-
       - name: Restore dependencies
         run: dotnet restore
 
       - name: Build
         run: dotnet build NBomber.YCSB.sln
 
-      - name: Run tests
-        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj
+      - name: Docker Compose Up MongoDb
+        run: |
+          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml wait --timeout 30 mongodb || true
+
+      - name: Run tests MongoDb
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.MongoDbTests"
+
+      - name: Docker Compose Up Redis
+        run: |
+          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml wait --timeout 30 redis || true
+
+      - name: Run tests Redis
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.RedisTests"
+
+      - name: Docker Compose Up Postgres
+        run: |
+          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml wait --timeout 30 postgres || true
+
+      - name: Run tests Postgres
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.PostgresNoSqlTests"
+
+
