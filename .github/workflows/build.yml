@@ -39,7 +39,7 @@ jobs:
         run: dotnet restore
 
       - name: Build
-        run: dotnet build Nbomber.YCSB.sln
+        run: dotnet build NBomber.YCSB.sln
 
       - name: Run tests
         run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj
