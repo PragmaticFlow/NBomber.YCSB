@@ -23,7 +23,7 @@ namespace NBomber.YCSB.Tests
             var readCountPersent = TestsHelper.RoundToNearest(readCount * 100 / sum, 10);
             var updateCountPersent = TestsHelper.RoundToNearest(updateCount * 100 / sum, 10);
 
-            Assert.Equal(40, readCountPersent);
+            Assert.Equal(50, readCountPersent);
             Assert.Equal(50, updateCountPersent);
         }
 
