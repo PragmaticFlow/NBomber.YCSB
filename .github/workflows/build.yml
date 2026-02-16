@@ -1,0 +1,54 @@
+name: Build
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clear NuGet cache
+        run: dotnet nuget locals all --clear     
+
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build NBomber.YCSB.sln
+
+      - name: Docker Compose Up MongoDb
+        run: |
+          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/MongoDb/docker-compose.yml wait --timeout 30 mongodb || true
+
+      - name: Run tests MongoDb
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.MongoDbTests"
+
+      - name: Docker Compose Up Redis
+        run: |
+          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml wait --timeout 30 redis || true
+
+      - name: Run tests Redis
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.RedisTests"
+
+      - name: Docker Compose Up Postgres
+        run: |
+          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml up -d
+          docker compose -f src/NBomber.YCSB/PosgresNoSQL/docker-compose.yml wait --timeout 30 postgres || true
+
+      - name: Run tests Postgres
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.PostgresNoSqlTests"
+
+
