@@ -124,7 +124,7 @@ namespace NBomber.YCSB.Tests
                 ReadAllFields = false,
                 Props = [
                     "mongodb.host=localhost",
-                    "mongodb.port=32768"
+                    "mongodb.port=27017"
                 ]
             };
 
