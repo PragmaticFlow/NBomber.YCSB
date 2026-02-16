@@ -16,9 +16,15 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
     public MongoDbYcsbClient(Dictionary<string, string> props)
     {
-        var url = YcsbCliArgs.TryGet(props, "mongodb.url", defaultValue: "mongodb://localhost:27017");
+        var host = YcsbCliArgs.TryGet(props, "mongodb.host", defaultValue: "localhost");
+        var port = YcsbCliArgs.TryGet(props, "mongodb.port", defaultValue: "27017");
 
-        _client = new MongoClient(url);
+        var mongoClientSett = new MongoClientSettings()
+        {
+            Server = new MongoServerAddress(host, int.Parse(port))
+        };
+
+        _client = new MongoClient(mongoClientSett);
         _db = _client.GetDatabase(databaseName);
     }
 

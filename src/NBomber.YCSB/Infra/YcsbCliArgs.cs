@@ -1,5 +1,4 @@
 ﻿using CommandLine;
-using NATS.Client;
 
 namespace NBomber.YCSB.Infra;
 
@@ -9,7 +8,7 @@ public class YcsbCliArgs
     [Option( "workload", Required = true, HelpText = "Set workload type (A, B, C, D, E)")]
     public Workload Workload { get; set; }
 
-    [Option("recordcount", Required = false, Default = 1000, HelpText = "Number of records to insert")]
+    [Option("recordcount", Required = false, Default = 1000, HelpText = "Number of records to insert in the dataset at the start of the workload")]
     public ulong RecordCount { get; set; }
 
     [Option("operationcount", Required = false, Default = 1000, HelpText = "Number of operations to execute")]

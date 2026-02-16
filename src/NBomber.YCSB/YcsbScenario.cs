@@ -84,7 +84,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         })
         .WithWarmUpDuration(TimeSpan.FromSeconds(3))
         .WithLoadSimulations(
-            Simulation.IterationsForConstant(copies: settings.ThreadCount, iterations: (int)settings.RecordCount)
+            Simulation.IterationsForConstant(copies: settings.ThreadCount, iterations: settings.OperationCount)
         );
 
         var runner = NBomberRunner
