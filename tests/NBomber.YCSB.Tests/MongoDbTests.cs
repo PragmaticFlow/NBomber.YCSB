@@ -122,7 +122,10 @@ namespace NBomber.YCSB.Tests
                 ZeroPadding = 5,
                 InsertOrder = "ordered",
                 ReadAllFields = false,
-                Props = ["mongodb.url=mongodb://localhost:27017"]
+                Props = [
+                    "mongodb.host=localhost",
+                    "mongodb.port=27017"
+                ]
             };
 
             var props = YcsbCliArgs.ParseProps(settings.Props);

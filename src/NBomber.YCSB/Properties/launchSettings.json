@@ -2,9 +2,9 @@
   "profiles": {
     "NBomber.YCSB": {
       "commandName": "Project",
-      //"commandLineArgs": "run --workload E --recordcount 1000 --db redis -p redis.host=localhost; redis.port=6379",
-      //"commandLineArgs": "run --workload B --recordcount 1000 --zeropadding 5 --db mongodb --insertorder 'ordered' -p mongodb.url=\"mongodb://localhost:27017\""
-      "commandLineArgs": "run --workload A --recordcount 10000 --zeropadding 5 --db postgres --insertorder 'ordered' -p postgres.host=\"localhost\" postgres.port=\"5432\" postgres.database=\"mydb\" postgres.user=\"myuser\" postgres.password=\"mysecretpassword\""
+      //"commandLineArgs": "run --workload E --recordcount 1000 --db redis -p redis.host=localhost redis.port=6379"
+      "commandLineArgs": "run --workload B --recordcount 1000 --zeropadding 5 --db mongodb --insertorder 'ordered' -p mongodb.host=localhost mongodb.port=27017"
+      //"commandLineArgs": "run --workload A --recordcount 10000 --operationcount 50000 --zeropadding 5 --db postgres --insertorder 'ordered' -p postgres.host=\"localhost\" postgres.port=\"5432\" postgres.database=\"mydb\" postgres.user=\"myuser\" postgres.password=\"mysecretpassword\""
     }
   }
 }

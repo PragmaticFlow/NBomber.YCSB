@@ -10,3 +10,7 @@ The YCSB framework also automates or simplifies essential benchmarking process t
 - Executing the workload on the database
 - Collecting and storing performance data
 - Creating a new interface layer for benchmarking
+
+## Links
+
+- [Our project docs](https://nbomber.com/docs/load-testing-databases/overview)
