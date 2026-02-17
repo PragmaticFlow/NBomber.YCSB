@@ -17,8 +17,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
         var scenario = Scenario.Create(workloadDescription, async context =>
         {
-            var operation = context.Random.Choice(operations);
-            var values = dataGen.CreateValues();
+            var operation = context.Random.Choice(operations); 
 
             switch (operation)
             {
@@ -26,6 +25,8 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     await Step.Run("insert", context, async () =>
                     {
                         var key = dataGen.GetKeyNext();
+                        var values = dataGen.CreateValues();
+
                         return await ycsbClient.Insert(table: tableName, key, values);
                     });
                     break;
@@ -54,6 +55,8 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     await Step.Run("update", context, async () =>
                     {
                         var key = dataGen.GetKeyZipf(context);
+                        var values = dataGen.CreateValuesToUpdate();
+
                         return await ycsbClient.Update(table: tableName, key, values);
                     });
                     break;
