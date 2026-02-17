@@ -108,6 +108,28 @@ namespace NBomber.YCSB.Tests
             Assert.Equal(5, insertCountPersent);
         }
 
+        [Fact]
+        public void Workload_F_Should_Execute_50_Read_50_ReadModifyWrite()
+        {
+            var result = RunWorkload(Workload.F);
+
+            var stats = result.ScenarioStats[0].StepStats;
+
+            var readStep = stats.First(s => s.StepName == "read");
+            var readCount = readStep.Ok.Request.Count + readStep.Fail.Request.Count;
+
+            var rmwStep = stats.First(s => s.StepName == "read-modify-write");
+            var rmwCount = rmwStep.Ok.Request.Count + rmwStep.Fail.Request.Count;
+
+            var sum = readCount + rmwCount;
+
+            var readCountPersent = TestsHelper.RoundToNearest(readCount * 100 / sum, 10);
+            var rmwCountPersent = TestsHelper.RoundToNearest(rmwCount * 100 / sum, 10);
+
+            Assert.Equal(50, readCountPersent);
+            Assert.Equal(50, rmwCountPersent);
+        }
+
         private Contracts.Stats.NodeStats RunWorkload(Workload workload)
         {
             var settings = new YcsbCliArgs
@@ -122,6 +144,7 @@ namespace NBomber.YCSB.Tests
                 ZeroPadding = 5,
                 InsertOrder = "ordered",
                 ReadAllFields = false,
+                WriteAllFields = false,
                 Props = [
                     "postgres.host=localhost",
                     "postgres.port=5432",

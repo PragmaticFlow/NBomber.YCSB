@@ -93,9 +93,9 @@ public class RedisYcsbClient : IDbYcsbClient
         }
         else
         {
-            var redisFields = fields.Select(c => (RedisValue)c).ToArray();
+            var fieldNames = fields.Select(c => (RedisValue)c).ToArray();
 
-            var values = await _db.HashGetAsync(redisKey, redisFields);
+            var values = await _db.HashGetAsync(redisKey, fieldNames);
 
             var size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(values);
 

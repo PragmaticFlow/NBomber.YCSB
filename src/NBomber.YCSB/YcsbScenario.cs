@@ -68,6 +68,25 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                         return await ycsbClient.Scan(table: tableName, key, recordScan, fields);
                     });
                     break;
+
+                case OperationType.ReadModifyWrite:
+                    await Step.Run("read-modify-write", context, async () =>
+                    {
+                        var key = dataGen.GetKeyZipf(context);
+                        var fields = dataGen.GetFieldNames();
+                        var updateValues = dataGen.CreateValuesToUpdate();
+
+                        var readResponse = await ycsbClient.Read(table: tableName, key, fields);
+                        if (readResponse.IsError)
+                            return Response.Fail<object>(readResponse.Message, readResponse.StatusCode);
+
+                        var updateResponse = await ycsbClient.Update(table: tableName, key, updateValues);
+                        if (updateResponse.IsError)
+                            return Response.Fail<object>(updateResponse.Message, updateResponse.StatusCode);
+
+                        return Response.Ok(sizeBytes: readResponse.SizeBytes + updateResponse.SizeBytes);
+                    });
+                    break;
             }
             return Response.Ok();
         })

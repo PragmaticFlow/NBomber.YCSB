@@ -12,6 +12,7 @@ public class DataGenerator(YcsbCliArgs settings)
     private readonly int _fieldLength = settings.FieldLength;
     private readonly bool _orderedInserts = settings.InsertOrder.Equals("ordered", StringComparison.OrdinalIgnoreCase);
     private readonly bool _readAllFields = settings.ReadAllFields;
+    private readonly bool _writeAllFields = settings.WriteAllFields;
     private readonly ThreadLocal<Faker> _faker = new(() => new Faker());
     
     private ulong _recordCount = settings.RecordCount;
@@ -82,6 +83,22 @@ public class DataGenerator(YcsbCliArgs settings)
             values[field] = GenerateFieldValue();
 
         return values;
+    }
+
+    public Dictionary<string, string> CreateValuesToUpdate()
+    {
+        if (_writeAllFields)
+        {
+            return CreateValues();
+        }
+        else
+        {
+            var randomFieldIndex = _faker.Value!.Random.Int(1, _fieldCount);
+            return new Dictionary<string, string>
+            {
+                [$"field{randomFieldIndex}"] = GenerateFieldValue()
+            };
+        }
     }
 
     public HashSet<string>? GetFieldNames()

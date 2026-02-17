@@ -29,8 +29,11 @@ public class YcsbCliArgs
     [Option("fieldlength", Required = false, Default = 100, HelpText = "The size of each field (default: 100)")]
     public int FieldLength { get; set; }
 
-    [Option("readallfields", Required = false, Default = true, HelpText = "For deciding whether to read one field (false) or all fields (true) - (default: true)")]
+    [Option("readallfields", Required = false, Default = true, HelpText = "For deciding whether to read all fields (true) or just one field (false) - (default: true)")]
     public bool ReadAllFields { get; set; }
+
+    [Option("writeallfields", Required = false, Default = false, HelpText = "For deciding whether to write all fields (true) or just one field (false) on update - (default: false)")]
+    public bool WriteAllFields { get; set; }
 
     [Option("zeropadding", Required = false, Default = 1, HelpText = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)")]
     public int ZeroPadding { get; set; }
