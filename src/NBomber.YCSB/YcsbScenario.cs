@@ -81,11 +81,11 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
                         var readResponse = await ycsbClient.Read(table: tableName, key, fields);
                         if (readResponse.IsError)
-                            return Response.Fail<object>(readResponse.Message, readResponse.StatusCode);
+                            return readResponse;
 
                         var updateResponse = await ycsbClient.Update(table: tableName, key, updateValues);
                         if (updateResponse.IsError)
-                            return Response.Fail<object>(updateResponse.Message, updateResponse.StatusCode);
+                            return updateResponse;
 
                         return Response.Ok(sizeBytes: readResponse.SizeBytes + updateResponse.SizeBytes);
                     });
