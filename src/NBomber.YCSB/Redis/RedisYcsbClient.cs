@@ -103,6 +103,40 @@ public class RedisYcsbClient : IDbYcsbClient
         }      
     }
 
+    public async Task<Response<object>> ReadModifyWrite(string table, string key, HashSet<string>? fields, Dictionary<string, string> values)
+    {
+        var redisKey = AddKeyPrefix(key);
+
+        // Read phase
+        long size;
+
+        if (fields == null || fields.Count == 0)
+        {
+            var readEntries = await _db.HashGetAllAsync(redisKey);
+            size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(readEntries);
+
+            if (readEntries.Length == 0)
+                return Response.Fail(statusCode: "no data");
+        }
+        else
+        {
+            var fieldNames = fields.Select(c => (RedisValue)c).ToArray();
+            var readValues = await _db.HashGetAsync(redisKey, fieldNames);
+            size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(readValues);
+        }
+
+        // Update phase
+        var updateEntries = values
+            .Select(kv => new HashEntry(kv.Key, kv.Value ?? string.Empty))
+            .ToArray();
+
+        size += RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(updateEntries);
+
+        await _db.HashSetAsync(redisKey, updateEntries);
+
+        return Response.Ok(sizeBytes: size);
+    }
+
     public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> fields)
     {
         // Query Redis Sorted Set to read keys in the specified range

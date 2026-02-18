@@ -22,53 +22,53 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             switch (operation)
             {
                 case OperationType.Insert:
-                    await Step.Run("insert", context, async () =>
+                    await Step.Run("insert", context, () =>
                     {
                         var key = dataGen.GetKeyNext();
                         var values = dataGen.CreateValues();
 
-                        return await ycsbClient.Insert(table: tableName, key, values);
+                        return ycsbClient.Insert(table: tableName, key, values);
                     });
                     break;
 
                 case OperationType.Read:
-                    await Step.Run("read", context, async () =>
+                    await Step.Run("read", context, () =>
                     {
                         var key = dataGen.GetKeyZipf(context);
                         var fields = dataGen.GetFieldNames();
 
-                        return await ycsbClient.Read(table: tableName, key, fields);
+                        return ycsbClient.Read(table: tableName, key, fields);
                     });
                     break;
 
                 case OperationType.ReadLatest:
-                    await Step.Run("read latest", context, async () =>
+                    await Step.Run("read latest", context, () =>
                     {
                         var key = dataGen.GetKeyLatest(context);
                         var fields = dataGen.GetFieldNames();
 
-                        return await ycsbClient.Read(table: tableName, key, fields);
+                        return ycsbClient.Read(table: tableName, key, fields);
                     });
                     break;
 
                 case OperationType.Update:
-                    await Step.Run("update", context, async () =>
+                    await Step.Run("update", context, () =>
                     {
                         var key = dataGen.GetKeyZipf(context);
                         var values = dataGen.CreateValuesToUpdate();
 
-                        return await ycsbClient.Update(table: tableName, key, values);
+                        return ycsbClient.Update(table: tableName, key, values);
                     });
                     break;
 
                 case OperationType.Scan:
-                    await Step.Run("scan", context, async () =>
+                    await Step.Run("scan", context, () =>
                     {
                         var key = dataGen.GetKeyZipf(context);
                         var fields = dataGen.GetFieldNames();
                         var recordScan = context.Random.Next(1, 10);
 
-                        return await ycsbClient.Scan(table: tableName, key, recordScan, fields);
+                        return ycsbClient.Scan(table: tableName, key, recordScan, fields);
                     });
                     break;
 
@@ -79,15 +79,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                         var fields = dataGen.GetFieldNames();
                         var updateValues = dataGen.CreateValuesToUpdate();
 
-                        var readResponse = await ycsbClient.Read(table: tableName, key, fields);
-                        if (readResponse.IsError)
-                            return readResponse;
-
-                        var updateResponse = await ycsbClient.Update(table: tableName, key, updateValues);
-                        if (updateResponse.IsError)
-                            return updateResponse;
-
-                        return Response.Ok(sizeBytes: readResponse.SizeBytes + updateResponse.SizeBytes);
+                        return await ycsbClient.ReadModifyWrite(table: tableName, key, fields, updateValues);
                     });
                     break;
             }

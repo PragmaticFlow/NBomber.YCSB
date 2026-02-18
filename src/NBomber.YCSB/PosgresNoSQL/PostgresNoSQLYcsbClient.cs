@@ -192,6 +192,61 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         return Response.Ok(sizeBytes: sizeBytes);
     }
 
+    public async Task<Response<object>> ReadModifyWrite(string table, string key, HashSet<string>? fields, Dictionary<string, string> values)
+    {
+        // Read phase
+        string readSql;
+
+        if (fields == null || fields.Count == 0)
+        {
+            readSql = $@"
+                SELECT {COLUMN_NAME}
+                FROM {TABLE_NAME}
+                WHERE {PRIMARY_KEY} = @key";
+        }
+        else
+        {
+            var fieldSelectors = string.Join(", ",
+                fields.Select(f => $"'{f}', {COLUMN_NAME}->'{f}'"));
+
+            readSql = $@"
+                SELECT jsonb_build_object({fieldSelectors}) as {COLUMN_NAME}
+                FROM {TABLE_NAME}
+                WHERE {PRIMARY_KEY} = @key";
+        }
+
+        await using var conn = await _dataSource.OpenConnectionAsync();
+
+        using var readCmd = new NpgsqlCommand(readSql, conn);
+        readCmd.Parameters.AddWithValue("@key", key);
+
+        var result = await readCmd.ExecuteScalarAsync();
+
+        if (result == null || result == DBNull.Value)
+            return Response.Fail(statusCode: "no data");
+
+        string readJson = result.ToString();
+        long size = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(readJson);
+
+        // Update phase
+        string updateJson = JsonSerializer.Serialize(values);
+
+        string updateSql = $@"
+            UPDATE {TABLE_NAME}
+            SET {COLUMN_NAME} = @json::jsonb
+            WHERE {PRIMARY_KEY} = @key";
+
+        using var updateCmd = new NpgsqlCommand(updateSql, conn);
+        updateCmd.Parameters.AddWithValue("@key", key);
+        updateCmd.Parameters.AddWithValue("@json", updateJson);
+
+        await updateCmd.ExecuteNonQueryAsync();
+
+        size += Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(updateJson);
+
+        return Response.Ok(sizeBytes: size);
+    }
+
     public async Task<Response<object>> Update(string table, string key, Dictionary<string, string> values)
     {
         string jsonValue = JsonSerializer.Serialize(values);
