@@ -68,7 +68,7 @@ public class MongoDbYcsbClient : IDbYcsbClient
         return Response.Ok(sizeBytes: size);
     }
 
-    public async Task<Response<object>> Read(string table, string key, HashSet<string> fields)
+    public async Task<Response<object>> Read(string table, string key, HashSet<string>? fields)
     {
         var col = _db.GetCollection<BsonDocument>(table);
 
@@ -89,10 +89,10 @@ public class MongoDbYcsbClient : IDbYcsbClient
                                 (p, f) => p.Include(f)
                             );
 
-            var result = col
+            var result = await col
                 .Find(filter)
                 .Project<BsonDocument>(projection)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             var size = MongoDbHelper.GetSize(result);
 
@@ -135,6 +135,50 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
             return Response.Ok(sizeBytes: sizeBytes);
         }
+    }
+
+    public async Task<Response<object>> ReadModifyWrite(string table, string key, HashSet<string>? fields, Dictionary<string, string> values)
+    {
+        var col = _db.GetCollection<BsonDocument>(table);
+        var filter = MongoDbHelper.BuildFilter(key);
+
+        // Read phase
+        long size;
+
+        if (fields == null || fields.Count == 0)
+        {
+            var result = await col.Find(filter).FirstOrDefaultAsync();
+            size = MongoDbHelper.GetSize(result);
+        }
+        else
+        {
+            var projection = fields.Aggregate(
+                Builders<BsonDocument>.Projection.Include("_id"),
+                (p, f) => p.Include(f)
+            );
+            var result = await col.Find(filter).Project<BsonDocument>(projection).FirstOrDefaultAsync();
+            size = MongoDbHelper.GetSize(result);
+        }
+
+        // Update phase
+        var existing = await col.Find(filter).FirstOrDefaultAsync();
+
+        if (existing == null)
+            return Response.Fail(statusCode: "no data");
+
+        size += MongoDbHelper.GetSize(existing);
+
+        var updates = values
+            .Select(kv =>
+                Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
+            ).ToList();
+
+        updates.Add(Builders<BsonDocument>.Update.Set("updatedAt", DateTime.UtcNow));
+
+        var update = Builders<BsonDocument>.Update.Combine(updates);
+        await col.UpdateOneAsync(filter, update);
+
+        return Response.Ok(sizeBytes: size);
     }
 
     public async Task<Response<object>> DeleteAllData()

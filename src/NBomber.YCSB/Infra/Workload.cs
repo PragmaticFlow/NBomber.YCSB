@@ -28,7 +28,12 @@ public enum Workload
     /// <summary>
     /// Short-range workload performing scans with occasional inserts.(95% scan, 5% inserts)
     /// </summary>
-    E
+    E,
+
+    /// <summary>
+    /// Read-modify-write workload (50% read, 50% read-modify-write)
+    /// </summary>
+    F
 }
 
 /// <summary>
@@ -59,7 +64,12 @@ public enum OperationType
     /// <summary>
     /// Represents a scan operation, typically used for range queries.
     /// </summary>
-    Scan
+    Scan,
+
+    /// <summary>
+    /// Represents a read-modify-write operation.
+    /// </summary>
+    ReadModifyWrite,
 }
 
 /// <summary>
@@ -95,6 +105,7 @@ public static class WorkloadManager
             Workload.C => [(OperationType.Read, 100)],
             Workload.D => [(OperationType.ReadLatest, 95), (OperationType.Insert, 5)],
             Workload.E => [(OperationType.Scan, 95), (OperationType.Insert, 5)],
+            Workload.F => [(OperationType.Read, 50), (OperationType.ReadModifyWrite, 50)],
             _ => throw new ArgumentOutOfRangeException(nameof(workload), workload, null)
         };
     }
@@ -113,6 +124,7 @@ public static class WorkloadManager
             Workload.C => "Read Only",
             Workload.D => "Read Latest",
             Workload.E => "Short Range",
+            Workload.F => "Read Modify Write",
             _ => ""
         };
     }
