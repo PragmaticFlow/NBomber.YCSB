@@ -6,6 +6,7 @@ using NBomber.YCSB.Infra;
 using NBomber.YCSB.MongoDb;
 using NBomber.YCSB.PosgresNoSQL;
 using NBomber.YCSB.Redis;
+using NBomber.YCSB.ScyllaDb;
 
 Console.WriteLine("NBomber YCSB interactive console started.");
 Console.WriteLine("Type a command (for example):");
@@ -43,7 +44,7 @@ static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
 {
     var propsDict = YcsbCliArgs.ParseProps(settings.Props);
 
-    switch (settings.Db?.ToLower()) 
+    switch (settings.Db?.ToLower())
     { 
         case "redis": 
             return new RedisYcsbClient(propsDict);
@@ -51,7 +52,10 @@ static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
             return new MongoDbYcsbClient(propsDict);
         case "postgres":
             return new PostgresNoSQLYcsbClient(propsDict);
-        default: 
+        case "scylladb":
+            propsDict["fieldcount"] = settings.FieldCount.ToString();
+            return new ScyllaYcsbClient(propsDict);
+        default:
             throw new NotSupportedException($"Database '{settings.Db}' is not supported.");
     }
 }
