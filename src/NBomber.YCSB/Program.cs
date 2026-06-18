@@ -1,5 +1,4 @@
-﻿using CommandLine;
-using MongoDB.Driver;
+﻿using System.CommandLine;
 using NBomber.YCSB;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
@@ -12,39 +11,41 @@ Console.WriteLine("Type a command (for example):");
 Console.WriteLine("run --workload A --recordcount 1000 --db redis -p redis.host=localhost -p redis.port=6379");
 Console.WriteLine("Type 'exit' to quit.");
 
-Parser.Default.ParseArguments<YcsbCliArgs>(args)
-   .WithParsed(settings =>
-   {
-       var argsValidator = new YcsbCliArgsValidator();
+var runCommand = new Command("run", "Run a workload");
+YcsbCliArgs.AddOptionsTo(runCommand);
 
-       var validation = argsValidator.Validate(settings);
+runCommand.SetAction(p =>
+{
+    var settings = YcsbCliArgs.FromParseResult(p);
 
-       if (!validation.IsValid)
-       {
-           Console.WriteLine("Validation failed:");
-           foreach (var error in validation.Errors)
-               Console.WriteLine($"  - {error.ErrorMessage}");
-           return;
-       }
+    var validator = new YcsbCliArgsValidator();
+    var validation = validator.Validate(settings);
 
-       var client = GetYcsbClient(settings);
+    if (!validation.IsValid)
+    {
+        Console.WriteLine("Validation failed:");
 
-       var scenario = new YcsbScenario(client);
-       scenario.Run(settings);
-   })
-   .WithNotParsed(errors =>
-   {
-       Console.WriteLine("Failed to parse command line options:");
-       foreach (var error in errors)
-           Console.WriteLine($" {error}");
-   });
+        foreach (var error in validation.Errors)
+            Console.WriteLine($"  - {error.ErrorMessage}");
 
-static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings) 
+        return;
+    }
+
+    var client = GetYcsbClient(settings);
+    var scenario = new YcsbScenario(client);
+    scenario.Run(settings);
+});
+
+var rootCommand = new RootCommand();
+rootCommand.Subcommands.Add(runCommand);
+return rootCommand.Parse(args).Invoke();
+
+static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
 {
     var propsDict = YcsbCliArgs.ParseProps(settings.Props);
 
     switch (settings.Db?.ToLower()) 
-    { 
+    {
         case "redis": 
             return new RedisYcsbClient(propsDict);
         case "mongodb":
