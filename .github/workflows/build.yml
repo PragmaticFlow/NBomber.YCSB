@@ -51,4 +51,12 @@ jobs:
       - name: Run tests Postgres
         run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.PostgresNoSqlTests"
 
+      - name: Docker Compose Up RavenDb
+        run: |
+          docker compose -f src/NBomber.YCSB/RavenDb/docker-compose.yml up -d --wait --wait-timeout 180 \
+          || { docker compose -f src/NBomber.YCSB/RavenDb/docker-compose.yml logs; exit 1; }
+
+      - name: Run tests RavenDb
+        run: dotnet test tests/NBomber.YCSB.Tests/NBomber.YCSB.Tests.csproj --verbosity minimal --filter "NBomber.YCSB.Tests.RavenDbTests"
+
 

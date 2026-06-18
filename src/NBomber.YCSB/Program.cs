@@ -1,10 +1,10 @@
 ﻿using CommandLine;
-using MongoDB.Driver;
 using NBomber.YCSB;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
 using NBomber.YCSB.MongoDb;
 using NBomber.YCSB.PosgresNoSQL;
+using NBomber.YCSB.RavenDb;
 using NBomber.YCSB.Redis;
 
 Console.WriteLine("NBomber YCSB interactive console started.");
@@ -51,6 +51,8 @@ static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
             return new MongoDbYcsbClient(propsDict);
         case "postgres":
             return new PostgresNoSQLYcsbClient(propsDict);
+        case "ravendb":
+            return new RavenDbYcsbClient(propsDict);
         default: 
             throw new NotSupportedException($"Database '{settings.Db}' is not supported.");
     }

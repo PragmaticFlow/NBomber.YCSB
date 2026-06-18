@@ -1,16 +1,16 @@
 using NBomber.YCSB.Infra;
-using NBomber.YCSB.Redis;
+using NBomber.YCSB.RavenDb;
 
 namespace NBomber.YCSB.Tests
 {
-    public class RedisTests
+    public class RavenDbTests
     {
         [Fact]
         public async Task Workload_A_Shold_Execute_50_Read_50_Update()
         {
             await TestsHelper.RetryAsync(() =>
             {
-                var result = RunWorkload(Workload.A);
+                var result = RunWorkload(Workload.A, recordCount: 1000, operationCount: 200);
 
                 var stats = result.ScenarioStats[0].StepStats;
 
@@ -37,7 +37,7 @@ namespace NBomber.YCSB.Tests
         {
             await TestsHelper.RetryAsync(() =>
             {
-                var result = RunWorkload(Workload.B);
+                var result = RunWorkload(Workload.B, recordCount: 1000, operationCount: 1000);
 
                 var stats = result.ScenarioStats[0].StepStats;
 
@@ -64,7 +64,7 @@ namespace NBomber.YCSB.Tests
         {
             await TestsHelper.RetryAsync(() =>
             {
-                var result = RunWorkload(Workload.C);
+                var result = RunWorkload(Workload.C, recordCount: 1000, operationCount: 1000);
 
                 var stats = result.ScenarioStats[0].StepStats;
 
@@ -84,7 +84,7 @@ namespace NBomber.YCSB.Tests
         {
             await TestsHelper.RetryAsync(() =>
             {
-                var result = RunWorkload(Workload.D);
+                var result = RunWorkload(Workload.D, recordCount: 1000, operationCount: 1000);
 
                 var stats = result.ScenarioStats[0].StepStats;
 
@@ -111,7 +111,7 @@ namespace NBomber.YCSB.Tests
         {
             await TestsHelper.RetryAsync(() =>
             {
-                var result = RunWorkload(Workload.E);
+                var result = RunWorkload(Workload.E, recordCount: 1000, operationCount: 1000);
 
                 var stats = result.ScenarioStats[0].StepStats;
 
@@ -138,7 +138,7 @@ namespace NBomber.YCSB.Tests
         {
             await TestsHelper.RetryAsync(() =>
             {
-                var result = RunWorkload(Workload.F);
+                var result = RunWorkload(Workload.F, recordCount: 1000, operationCount: 200);
 
                 var stats = result.ScenarioStats[0].StepStats;
 
@@ -160,27 +160,31 @@ namespace NBomber.YCSB.Tests
             });
         }
 
-        private Contracts.Stats.NodeStats RunWorkload(Workload workload)
+        private Contracts.Stats.NodeStats RunWorkload(Workload workload, ulong recordCount, int operationCount)
         {
             var settings = new YcsbCliArgs
             {
                 Workload = workload,
-                RecordCount = 1000,
-                OperationCount = 1000,
-                Db = "redis",
+                RecordCount = recordCount,
+                OperationCount = operationCount,
+                Db = "ravendb",
                 ThreadCount = 1,
                 FieldCount = 10,
                 FieldLength = 100,
-                ZeroPadding = 1,
-                InsertOrder = "hashed",
-                Props = ["redis.host=localhost", "redis.port=6379"]
+                ZeroPadding = 5,
+                InsertOrder = "ordered",
+                ReadAllFields = false,
+                Props = [
+                    "ravendb.url=http://localhost:8080",
+                    "ravendb.database=ycsb"
+                ]
             };
 
             var props = YcsbCliArgs.ParseProps(settings.Props);
 
-            var redisClient = new RedisYcsbClient(props);
+            var ravenDbClient = new RavenDbYcsbClient(props);
 
-            var scenario = new YcsbScenario(redisClient);
+            var scenario = new YcsbScenario(ravenDbClient);
 
             return scenario.Run(settings);
         }

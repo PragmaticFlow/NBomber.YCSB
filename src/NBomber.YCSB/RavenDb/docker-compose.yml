@@ -1,0 +1,10 @@
+services:
+  ravendb:
+    image: ravendb/ravendb:latest
+    environment:
+      RAVEN_Setup_Mode: None
+      RAVEN_License_Eula_Accepted: "true"
+      RAVEN_Security_UnsecuredAccessAllowed: PublicNetwork
+      RAVEN_ServerUrl: "http://0.0.0.0:8080"
+    ports:
+      - "8080:8080"
