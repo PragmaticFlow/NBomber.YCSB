@@ -1,23 +1,43 @@
-﻿#pragma warning disable CS4014
+#pragma warning disable CS4014
+using NBomber.Contracts;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
 
 namespace NBomber.YCSB;
 
-public class YcsbScenario(IDbYcsbClient ycsbClient) 
+public class YcsbScenario(IDbYcsbClient ycsbClient)
 {
     public Contracts.Stats.NodeStats Run(YcsbCliArgs settings)
     {
-        var operations = WorkloadManager.GetOperations(settings.Workload);
         var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
+
+        var scenario = BuildScenario(workloadDescription, settings, ycsbClient);
+
+        var runner = NBomberRunner
+               .RegisterScenarios(scenario)
+               .WithTestName($"Test {settings.Db} - {workloadDescription}")
+               .WithTestSuite($"Test {settings.Db} - {workloadDescription}")
+               .WithReportingInterval(TimeSpan.FromSeconds(5));
+
+        if (settings.ExportFile != null)
+        {
+            runner = runner.WithReportFileName(settings.ExportFile);
+        }
+
+        return runner.Run();
+    }
+
+    public static ScenarioProps BuildScenario(string scenarioName, YcsbCliArgs settings, IDbYcsbClient ycsbClient)
+    {
+        var operations = WorkloadManager.GetOperations(settings.Workload);
         var tableName = "test_table";
 
         var dataGen = new DataGenerator(settings);
 
-        var scenario = Scenario.Create(workloadDescription, async context =>
+        var scenario = Scenario.Create(scenarioName, async context =>
         {
-            var operation = context.Random.Choice(operations); 
+            var operation = context.Random.Choice(operations);
 
             switch (operation)
             {
@@ -87,12 +107,19 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         })
         .WithInit(async context =>
         {
+            var partitionNumber = context.ScenarioPartition.Number;
+            var partitionCount = context.ScenarioPartition.Count;
+            dataGen.SetPartition(partitionNumber, partitionCount);
+
             await ycsbClient.InitDb();
-            await ycsbClient.DeleteAllData();
 
-            var list = dataGen.GenerateRandoms();
+            if (partitionNumber == 1)
+            {
+                await ycsbClient.DeleteAllData();
 
-            await ycsbClient.BulkInsert(tableName, list);
+                var list = dataGen.GenerateRandoms();
+                await ycsbClient.BulkInsert(tableName, list);
+            }
 
             dataGen.SetRecordCount(settings.RecordCount);
         })
@@ -101,17 +128,6 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             Simulation.IterationsForConstant(copies: settings.ThreadCount, iterations: settings.OperationCount)
         );
 
-        var runner = NBomberRunner
-               .RegisterScenarios(scenario)
-               .WithTestName($"Test {settings.Db} - {workloadDescription}")
-               .WithTestSuite($"Test {settings.Db} - {workloadDescription}")
-               .WithReportingInterval(TimeSpan.FromSeconds(5));
-
-        if (settings.ExportFile != null)
-        {
-            runner = runner.WithReportFileName(settings.ExportFile);
-        }
-
-        return runner.Run();
+        return scenario;
     }
 }

@@ -14,18 +14,35 @@ public class DataGenerator(YcsbCliArgs settings)
     private readonly bool _readAllFields = settings.ReadAllFields;
     private readonly bool _writeAllFields = settings.WriteAllFields;
     private readonly ThreadLocal<Faker> _faker = new(() => new Faker());
-    
+
     private ulong _recordCount = settings.RecordCount;
+
+    private int _partitionNumber = 1;
+    private int _partitionCount = 1;
+    private long _insertCounter;
 
     public void SetRecordCount(ulong insertedCount)
     {
         _recordCount = insertedCount;
-    }  
+    }
+
+    public void SetPartition(int partitionNumber, int partitionCount)
+    {
+        _partitionNumber = partitionNumber < 1 ? 1 : partitionNumber;
+        _partitionCount = partitionCount < 1 ? 1 : partitionCount;
+    }
 
     public string GetKeyNext()
     {
-        var keyNum = Interlocked.Increment(ref _recordCount);
-        return BuildKeyName(keyNum, _zeroPadding);
+        if (_partitionCount <= 1)
+        {
+            var keyNum = Interlocked.Increment(ref _recordCount);
+            return BuildKeyName(keyNum, _zeroPadding);
+        }
+
+        var local = (ulong)Interlocked.Increment(ref _insertCounter);
+        var partitionedKeyNum = _recordCount + (local - 1) * (ulong)_partitionCount + (ulong)_partitionNumber;
+        return BuildKeyName(partitionedKeyNum, _zeroPadding);
     }
 
     public string GetKeyZipf(IScenarioContext context)
