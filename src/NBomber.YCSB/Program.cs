@@ -1,37 +1,16 @@
-﻿using CommandLine;
-using MongoDB.Driver;
+using CommandLine;
 using NBomber.YCSB;
-using NBomber.YCSB.DAL;
+using NBomber.YCSB.Cluster;
 using NBomber.YCSB.Infra;
-using NBomber.YCSB.MongoDb;
-using NBomber.YCSB.PosgresNoSQL;
-using NBomber.YCSB.Redis;
 
 Console.WriteLine("NBomber YCSB interactive console started.");
 Console.WriteLine("Type a command (for example):");
 Console.WriteLine("run --workload A --recordcount 1000 --db redis -p redis.host=localhost -p redis.port=6379");
 Console.WriteLine("Type 'exit' to quit.");
 
-Parser.Default.ParseArguments<YcsbCliArgs>(args)
-   .WithParsed(settings =>
-   {
-       var argsValidator = new YcsbCliArgsValidator();
-
-       var validation = argsValidator.Validate(settings);
-
-       if (!validation.IsValid)
-       {
-           Console.WriteLine("Validation failed:");
-           foreach (var error in validation.Errors)
-               Console.WriteLine($"  - {error.ErrorMessage}");
-           return;
-       }
-
-       var client = GetYcsbClient(settings);
-
-       var scenario = new YcsbScenario(client);
-       scenario.Run(settings);
-   })
+Parser.Default.ParseArguments<YcsbCliArgs, ClusterCliArgs>(args)
+   .WithParsed<ClusterCliArgs>(RunCluster)
+   .WithParsed<YcsbCliArgs>(RunSingleNode)
    .WithNotParsed(errors =>
    {
        Console.WriteLine("Failed to parse command line options:");
@@ -39,19 +18,40 @@ Parser.Default.ParseArguments<YcsbCliArgs>(args)
            Console.WriteLine($" {error}");
    });
 
-static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings) 
+static void RunSingleNode(YcsbCliArgs settings)
 {
-    var propsDict = YcsbCliArgs.ParseProps(settings.Props);
+    // ClusterCliArgs derives from YcsbCliArgs, so make sure we don't treat a cluster run as a single-node run.
+    if (settings is ClusterCliArgs)
+        return;
 
-    switch (settings.Db?.ToLower()) 
-    { 
-        case "redis": 
-            return new RedisYcsbClient(propsDict);
-        case "mongodb":
-            return new MongoDbYcsbClient(propsDict);
-        case "postgres":
-            return new PostgresNoSQLYcsbClient(propsDict);
-        default: 
-            throw new NotSupportedException($"Database '{settings.Db}' is not supported.");
-    }
+    if (!Validate(settings))
+        return;
+
+    var props = YcsbCliArgs.ParseProps(settings.Props);
+    var client = DbClientFactory.Create(settings.Db, props);
+
+    var scenario = new YcsbScenario(client);
+    scenario.Run(settings);
+}
+
+static void RunCluster(ClusterCliArgs settings)
+{
+    if (!Validate(settings))
+        return;
+
+    ClusterRunner.Run(settings);
+}
+
+static bool Validate(YcsbCliArgs settings)
+{
+    var validation = new YcsbCliArgsValidator().Validate(settings);
+
+    if (validation.IsValid)
+        return true;
+
+    Console.WriteLine("Validation failed:");
+    foreach (var error in validation.Errors)
+        Console.WriteLine($"  - {error.ErrorMessage}");
+
+    return false;
 }

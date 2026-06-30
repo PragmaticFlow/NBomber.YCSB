@@ -1,0 +1,20 @@
+include:
+  - ../Redis/docker-compose.yml
+  - ../MongoDb/docker-compose.yml
+  - ../PosgresNoSQL/docker-compose.yml
+
+services:
+
+  nats:
+    image: nats:2.11.4-alpine
+    container_name: nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--jetstream", "--http_port", "8222"]
+    restart: always
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

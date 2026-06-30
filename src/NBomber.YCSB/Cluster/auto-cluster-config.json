@@ -1,0 +1,22 @@
+{
+    "TestSuite": "YCSB Cluster",
+    "TestName": "YCSB All Databases",
+
+    "ClusterSettings": {
+
+        "AutoCluster": {
+            "ClusterId": "ycsb_cluster",
+            "NATSServerURL": "nats://localhost",
+
+            "Coordinator": {
+                "TargetScenarios": ["redis", "mongodb", "postgres"]
+            },
+
+            "Agent": {
+                "TargetScenarios": ["redis", "mongodb", "postgres"],
+                "AgentsCount": 5
+            }
+        }
+
+    }
+}

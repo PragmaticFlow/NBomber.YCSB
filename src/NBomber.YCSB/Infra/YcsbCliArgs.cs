@@ -17,7 +17,7 @@ public class YcsbCliArgs
     [Option("exportfile", Required = false, HelpText = "Export results to file")]
     public string ExportFile { get; set; }
 
-    [Option("db", Required = false, HelpText = "Database type (redis, postgres, etc.)")]
+    [Option("db", Required = false, HelpText = "Database type: redis, mongodb, postgres. In cluster mode you can pass several, comma-separated (e.g. redis,mongodb).")]
     public string Db { get; set; }
 
     [Option("threadcount", Required = false, Default = 1, HelpText = "The number of threads")]

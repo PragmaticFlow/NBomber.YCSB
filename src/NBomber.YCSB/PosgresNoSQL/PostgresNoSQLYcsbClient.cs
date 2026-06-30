@@ -318,7 +318,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         try
         {
-            string sql = $"TRUNCATE TABLE IF EXISTS {TABLE_NAME}";
+            string sql = $"TRUNCATE TABLE {TABLE_NAME}";
 
             await using var conn = await _dataSource.OpenConnectionAsync();
 
