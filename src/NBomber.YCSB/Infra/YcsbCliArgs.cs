@@ -1,48 +1,120 @@
-﻿using CommandLine;
+using System.CommandLine;
 
 namespace NBomber.YCSB.Infra;
 
-[Verb("run", HelpText = "Run a workload")]
 public class YcsbCliArgs
 {
-    [Option( "workload", Required = true, HelpText = "Set workload type (A, B, C, D, E)")]
     public Workload Workload { get; set; }
+    public ulong RecordCount { get; set; } = 1000;
+    public int OperationCount { get; set; } = 1000;
+    public string? ExportFile { get; set; }
+    public string? Db { get; set; }
+    public int ThreadCount { get; set; } = 1;
+    public int FieldCount { get; set; } = 10;
+    public int FieldLength { get; set; } = 100;
+    public bool ReadAllFields { get; set; } = true;
+    public bool WriteAllFields { get; set; } = false;
+    public int ZeroPadding { get; set; } = 1;
+    public string InsertOrder { get; set; } = "hashed";
+    public IEnumerable<string> Props { get; set; } = [];
 
-    [Option("recordcount", Required = false, Default = 1000, HelpText = "Number of records to insert in the dataset at the start of the workload")]
-    public ulong RecordCount { get; set; }
+    private static readonly Option<Workload> WorkloadOpt = new("--workload")
+    {
+        Description = "Set workload type (A, B, C, D, E, F)",
+        Required = true
+    };
+    private static readonly Option<ulong> RecordCountOpt = new("--recordcount")
+    {
+        Description = "Number of records to insert in the dataset at the start of the workload",
+        DefaultValueFactory = _ => 1000UL
+    };
+    private static readonly Option<int> OperationCountOpt = new("--operationcount")
+    {
+        Description = "Number of operations to execute",
+        DefaultValueFactory = _ => 1000
+    };
+    private static readonly Option<string?> ExportFileOpt = new("--exportfile")
+    {
+        Description = "Export results to file"
+    };
+    private static readonly Option<string?> DbOpt = new("--db")
+    {
+        Description = "Database type (redis, postgres, etc.)"
+    };
+    private static readonly Option<int> ThreadCountOpt = new("--threadcount")
+    {
+        Description = "The number of threads",
+        DefaultValueFactory = _ => 1
+    };
+    private static readonly Option<int> FieldCountOpt = new("--fieldcount")
+    {
+        Description = "The number of fields in a record (default: 10)",
+        DefaultValueFactory = _ => 10
+    };
+    private static readonly Option<int> FieldLengthOpt = new("--fieldlength")
+    {
+        Description = "The size of each field (default: 100)",
+        DefaultValueFactory = _ => 100
+    };
+    private static readonly Option<bool> ReadAllFieldsOpt = new("--readallfields")
+    {
+        Description = "For deciding whether to read all fields (true) or just one field (false) - (default: true)",
+        DefaultValueFactory = _ => true
+    };
+    private static readonly Option<bool> WriteAllFieldsOpt = new("--writeallfields")
+    {
+        Description = "For deciding whether to write all fields(true) or just one field(false) on update - (default: false)",
+        DefaultValueFactory = _ => false
+    };
+    private static readonly Option<int> ZeroPaddingOpt = new("--zeropadding")
+    {
+        Description = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)",
+        DefaultValueFactory = _ => 1
+    };
+    private static readonly Option<string> InsertOrderOpt = new("--insertorder")
+    {
+        Description = "Insert order for records: hashed or ordered (default: hashed)",
+        DefaultValueFactory = _ => "hashed"
+    };
+    private static readonly Option<string[]> PropsOpt = new("--prop", "-p")
+    {
+        Description = "Set a property (key=value). Repeat for multiple properties.",
+        AllowMultipleArgumentsPerToken = true
+    };
 
-    [Option("operationcount", Required = false, Default = 1000, HelpText = "Number of operations to execute")]
-    public int OperationCount { get; set; }
+    public static void AddOptionsTo(Command command)
+    {
+        command.Options.Add(WorkloadOpt);
+        command.Options.Add(RecordCountOpt);
+        command.Options.Add(OperationCountOpt);
+        command.Options.Add(ExportFileOpt);
+        command.Options.Add(DbOpt);
+        command.Options.Add(ThreadCountOpt);
+        command.Options.Add(FieldCountOpt);
+        command.Options.Add(FieldLengthOpt);
+        command.Options.Add(ReadAllFieldsOpt);
+        command.Options.Add(WriteAllFieldsOpt);
+        command.Options.Add(ZeroPaddingOpt);
+        command.Options.Add(InsertOrderOpt);
+        command.Options.Add(PropsOpt);
+    }
 
-    [Option("exportfile", Required = false, HelpText = "Export results to file")]
-    public string ExportFile { get; set; }
-
-    [Option("db", Required = false, HelpText = "Database type (redis, postgres, etc.)")]
-    public string Db { get; set; }
-
-    [Option("threadcount", Required = false, Default = 1, HelpText = "The number of threads")]
-    public int ThreadCount { get; set; }
-
-    [Option("fieldcount", Required = false, Default = 10, HelpText = "The number of fields in a record (default: 10)")]
-    public int FieldCount { get; set; }
-
-    [Option("fieldlength", Required = false, Default = 100, HelpText = "The size of each field (default: 100)")]
-    public int FieldLength { get; set; }
-
-    [Option("readallfields", Required = false, Default = true, HelpText = "For deciding whether to read all fields (true) or just one field (false) - (default: true)")]
-    public bool ReadAllFields { get; set; }
-
-    [Option("writeallfields", Required = false, Default = false, HelpText = "For deciding whether to write all fields (true) or just one field (false) on update - (default: false)")]
-    public bool WriteAllFields { get; set; }
-
-    [Option("zeropadding", Required = false, Default = 1, HelpText = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)")]
-    public int ZeroPadding { get; set; }
-
-    [Option("insertorder", Required = false, Default = "hashed", HelpText = "The name of the property for adding zero padding to record numbers in order to match string sort order. Controls the number of 0s to left pad with. (default: 1)")]
-    public required string InsertOrder { get; set; }
-
-    [Option('p', "prop", Required = false, Separator = ';', HelpText = "Set a property (key=value). Repeat for multiple properties.")]
-    public IEnumerable<string> Props { get; set; } = Enumerable.Empty<string>();
+    public static YcsbCliArgs FromParseResult(ParseResult p) => new()
+    {
+        Workload       = p.GetValue(WorkloadOpt),
+        RecordCount    = p.GetValue(RecordCountOpt),
+        OperationCount = p.GetValue(OperationCountOpt),
+        ExportFile     = p.GetValue(ExportFileOpt),
+        Db             = p.GetValue(DbOpt),
+        ThreadCount    = p.GetValue(ThreadCountOpt),
+        FieldCount     = p.GetValue(FieldCountOpt),
+        FieldLength    = p.GetValue(FieldLengthOpt),
+        ReadAllFields  = p.GetValue(ReadAllFieldsOpt),
+        WriteAllFields = p.GetValue(WriteAllFieldsOpt),
+        ZeroPadding    = p.GetValue(ZeroPaddingOpt),
+        InsertOrder    = p.GetValue(InsertOrderOpt) ?? "hashed",
+        Props          = p.GetValue(PropsOpt) ?? []
+    };
 
     public static Dictionary<string, string> ParseProps(IEnumerable<string> props)
     {
