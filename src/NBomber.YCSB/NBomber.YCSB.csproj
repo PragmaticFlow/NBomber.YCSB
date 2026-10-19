@@ -26,6 +26,7 @@
     <PackageReference Include="Npgsql" Version="10.0.1" />
     <PackageReference Include="StackExchange.Redis" Version="2.11.3" />
     <PackageReference Include="Standart.Hash.xxHash" Version="4.0.5" />
+    <PackageReference Include="RavenDB.Client" Version="6.2.2" />
   </ItemGroup>
 
 </Project>

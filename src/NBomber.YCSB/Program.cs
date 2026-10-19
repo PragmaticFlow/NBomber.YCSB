@@ -1,10 +1,10 @@
 ﻿using CommandLine;
-using MongoDB.Driver;
 using NBomber.YCSB;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
 using NBomber.YCSB.MongoDb;
 using NBomber.YCSB.PosgresNoSQL;
+using NBomber.YCSB.RavenDb;
 using NBomber.YCSB.Redis;
 using NBomber.YCSB.ScyllaDb;
 
@@ -52,6 +52,9 @@ static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
             return new MongoDbYcsbClient(propsDict);
         case "postgres":
             return new PostgresNoSQLYcsbClient(propsDict);
+        case "ravendb":
+            return new RavenDbYcsbClient(propsDict);
+        default: 
         case "scylladb":
             propsDict["fieldcount"] = settings.FieldCount.ToString();
             return new ScyllaYcsbClient(propsDict);
