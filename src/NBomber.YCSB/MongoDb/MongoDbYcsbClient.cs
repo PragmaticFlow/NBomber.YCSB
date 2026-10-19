@@ -47,13 +47,6 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
         var filter = MongoDbHelper.BuildFilter(key);
 
-        var existing = await col.Find(filter).FirstOrDefaultAsync();
-
-        if (existing == null)
-            return Response.Fail(statusCode: "no data");
-
-        var size = MongoDbHelper.GetSize(existing);
-
         var updates = values
             .Select(kv =>
                 Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
@@ -64,6 +57,11 @@ public class MongoDbYcsbClient : IDbYcsbClient
         var update = Builders<BsonDocument>.Update.Combine(updates);
 
         var result = await col.UpdateOneAsync(filter, update);
+
+        if (result.MatchedCount == 0)
+            return Response.Fail(statusCode: "no data");
+
+        var size = MongoDbHelper.GetSize(MongoDbHelper.BuildFieldsDocument(values));
 
         return Response.Ok(sizeBytes: size);
     }
@@ -143,12 +141,11 @@ public class MongoDbYcsbClient : IDbYcsbClient
         var filter = MongoDbHelper.BuildFilter(key);
 
         // Read phase
-        long size;
+        BsonDocument existing;
 
         if (fields == null || fields.Count == 0)
         {
-            var result = await col.Find(filter).FirstOrDefaultAsync();
-            size = MongoDbHelper.GetSize(result);
+            existing = await col.Find(filter).FirstOrDefaultAsync();
         }
         else
         {
@@ -156,18 +153,16 @@ public class MongoDbYcsbClient : IDbYcsbClient
                 Builders<BsonDocument>.Projection.Include("_id"),
                 (p, f) => p.Include(f)
             );
-            var result = await col.Find(filter).Project<BsonDocument>(projection).FirstOrDefaultAsync();
-            size = MongoDbHelper.GetSize(result);
-        }
 
-        // Update phase
-        var existing = await col.Find(filter).FirstOrDefaultAsync();
+            existing = await col.Find(filter).Project<BsonDocument>(projection).FirstOrDefaultAsync();
+        }
 
         if (existing == null)
             return Response.Fail(statusCode: "no data");
 
-        size += MongoDbHelper.GetSize(existing);
+        var size = MongoDbHelper.GetSize(existing);
 
+        // Update phase
         var updates = values
             .Select(kv =>
                 Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
@@ -177,6 +172,8 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
         var update = Builders<BsonDocument>.Update.Combine(updates);
         await col.UpdateOneAsync(filter, update);
+
+        size += MongoDbHelper.GetSize(MongoDbHelper.BuildFieldsDocument(values));
 
         return Response.Ok(sizeBytes: size);
     }
