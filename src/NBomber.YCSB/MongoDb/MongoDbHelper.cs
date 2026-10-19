@@ -18,6 +18,11 @@ static class MongoDbHelper
         };
     }
 
+    public static BsonDocument BuildFieldsDocument(Dictionary<string, string> values)
+    {
+        return [.. values.Select(kv => new BsonElement(kv.Key, kv.Value))];
+    }
+
     public static FilterDefinition<BsonDocument> BuildFilter(string key)
     {
         return Builders<BsonDocument>.Filter.Eq("_id", key);
