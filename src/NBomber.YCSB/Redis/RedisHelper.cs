@@ -2,11 +2,17 @@
 
 namespace NBomber.YCSB.Redis;
 
-static class RedisHelper
+public static class RedisHelper
 {
-    public static long GetSize(string value)
+    public static long GetSize(string? value)
     {
-        return System.Text.Encoding.UTF8.GetByteCount(value);
+        return value is null ? 0 : System.Text.Encoding.UTF8.GetByteCount(value);
+    }
+
+    // HashGet with a field list returns nulls for a missing key as well as for missing fields.
+    public static bool AllNull(RedisValue[] values)
+    {
+        return values.All(v => v.IsNull);
     }
 
     public static long GetSize(RedisValue[] values)

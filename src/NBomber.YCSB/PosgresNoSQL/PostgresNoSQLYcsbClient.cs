@@ -231,12 +231,11 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         // Update phase
         string updateJson = JsonSerializer.Serialize(values);
 
-        string updateSql = $@"
+        string UpdateSql = $@"
             UPDATE {TABLE_NAME}
-            SET {COLUMN_NAME} = @json::jsonb
+            SET {COLUMN_NAME} = {COLUMN_NAME} || @json::jsonb
             WHERE {PRIMARY_KEY} = @key";
-
-        using var updateCmd = new NpgsqlCommand(updateSql, conn);
+            using var updateCmd = new NpgsqlCommand(UpdateSql, conn);
         updateCmd.Parameters.AddWithValue("@key", key);
         updateCmd.Parameters.AddWithValue("@json", updateJson);
 
@@ -251,14 +250,14 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         string jsonValue = JsonSerializer.Serialize(values);
 
-        string sql = $@"
+        string UpdateSql = $@"
             UPDATE {TABLE_NAME}
-            SET {COLUMN_NAME} = @json::jsonb
+            SET {COLUMN_NAME} = {COLUMN_NAME} || @json::jsonb
             WHERE {PRIMARY_KEY} = @key";
 
         await using var conn = await _dataSource.OpenConnectionAsync();
 
-        using var cmd = new NpgsqlCommand(sql, conn);
+        using var cmd = new NpgsqlCommand(UpdateSql, conn);
 
         cmd.Parameters.AddWithValue("@key", key);
         cmd.Parameters.AddWithValue("@json", jsonValue);
@@ -318,7 +317,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         try
         {
-            string sql = $"TRUNCATE TABLE IF EXISTS {TABLE_NAME}";
+            string sql = $"TRUNCATE TABLE {TABLE_NAME}";
 
             await using var conn = await _dataSource.OpenConnectionAsync();
 

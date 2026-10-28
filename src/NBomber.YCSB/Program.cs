@@ -56,7 +56,6 @@ static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
             return new PostgresNoSQLYcsbClient(propsDict);
         case "ravendb":
             return new RavenDbYcsbClient(propsDict);
-        default: 
         case "scylladb":
             propsDict["fieldcount"] = settings.FieldCount.ToString();
             return new ScyllaYcsbClient(propsDict);

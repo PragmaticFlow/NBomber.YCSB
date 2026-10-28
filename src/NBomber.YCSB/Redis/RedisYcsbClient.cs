@@ -50,12 +50,12 @@ public class RedisYcsbClient : IDbYcsbClient
         var redisKey = AddKeyPrefix(key);
 
         var entries = values
-            .Select(kv => new HashEntry(redisKey, kv.Value ?? string.Empty))
+            .Select(kv => new HashEntry(kv.Key, kv.Value ?? string.Empty))
             .ToArray();
 
         var size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(entries);
 
-        await _db.HashSetAsync(key, entries);
+        await _db.HashSetAsync(redisKey, entries);
 
         await _db.SortedSetAddAsync(INDEX_KEY, key, 0);
             
@@ -99,8 +99,10 @@ public class RedisYcsbClient : IDbYcsbClient
 
             var size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(values);
 
-            return Response.Ok(sizeBytes: size);
-        }      
+            return RedisHelper.AllNull(values)
+                ? Response.Fail(statusCode: "no data")
+                : Response.Ok(sizeBytes: size);
+        }
     }
 
     public async Task<Response<object>> ReadModifyWrite(string table, string key, HashSet<string>? fields, Dictionary<string, string> values)
@@ -123,6 +125,9 @@ public class RedisYcsbClient : IDbYcsbClient
             var fieldNames = fields.Select(c => (RedisValue)c).ToArray();
             var readValues = await _db.HashGetAsync(redisKey, fieldNames);
             size = RedisHelper.GetSize(redisKey) + RedisHelper.GetSize(readValues);
+
+            if (RedisHelper.AllNull(readValues))
+                return Response.Fail(statusCode: "no data");
         }
 
         // Update phase
@@ -174,7 +179,7 @@ public class RedisYcsbClient : IDbYcsbClient
 
             var tasks = keys.Select(k => {
                 var kPrefix = AddKeyPrefix((string)k);
-                return _db.HashGetAllAsync(kPrefix);
+                return _db.HashGetAsync(kPrefix, redisFields);
             });
 
             var values = await Task.WhenAll(tasks);

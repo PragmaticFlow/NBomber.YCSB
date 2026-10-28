@@ -1,0 +1,110 @@
+schema: spec-driven
+
+# Project context, injected into every OpenSpec artifact instruction.
+# Keep it to constraints and facts that guide planning; details live in the code.
+context: |
+  Product: NBomber.YCSB, a YCSB (Yahoo! Cloud Serving Benchmark) implementation
+  built on NBomber. It is a benchmark tool, so changes must keep results
+  correct and comparable across databases. Not a web API.
+
+  Stack: .NET 9 console app (src/NBomber.YCSB), C# with Nullable and
+  ImplicitUsings enabled, NBomber 6.4.1, System.CommandLine 2.x,
+  FluentValidation, Bogus (field values), Standart.Hash.xxHash (hashed keys).
+  Tests: xUnit 2.9 in tests/NBomber.YCSB.Tests. CI: .github/workflows/build.yml.
+  NuGet audit treats NU1900-NU1904 as errors in both csproj files.
+
+  Architecture:
+  - Program.cs parses the `run` command into YcsbCliArgs, validates it, and
+    picks a client in GetYcsbClient by --db.
+  - IDbYcsbClient (Infra/IDbYcsbClient.cs) is the only database abstraction:
+    Insert, Read, Update, Scan, ReadModifyWrite, BulkInsert, DeleteAllData,
+    InitDb, each returning NBomber Response<object> with sizeBytes, or
+    Fail(statusCode: "no data") on a miss.
+  - One folder per database, each with a client class, an optional static
+    helper, and a docker-compose.yml: Redis, MongoDb, PosgresNoSQL (folder
+    name is misspelled; keep it), RavenDb, ScyllaDb.
+  - YcsbScenario builds one NBomber scenario. Init runs InitDb, then
+    DeleteAllData, then BulkInsert of recordcount rows. Each iteration picks
+    a weighted operation. Load: IterationsForConstant(threadcount, operationcount).
+  - Database settings come from `-p key=value` props read with
+    YcsbCliArgs.TryGet/TryParseInt, using `<db>.<setting>` names such as
+    redis.host, postgres.database, scylladb.replicationfactor.
+
+  Database models:
+  - Redis: hash at "hash:<key>"; sorted set "_indices" holds raw keys for Scan.
+  - MongoDB: database "ycsb"; document { _id, fields: { fieldN }, createdAt, updatedAt }.
+  - PostgreSQL: ycsb_table(ycsb_key PK, ycsb_value JSONB NOT NULL) plus a GIN
+    index. Updates merge with `ycsb_value || @json::jsonb`.
+  - RavenDB: documents in the configured database (default "ycsb").
+  - ScyllaDB: keyspace "ycsb", table ycsb_table(ycsb_key, field1..fieldN),
+    prepared statements, 3-node compose cluster, replication factor default 3.
+    Scan follows token order, not key order (a known deviation).
+
+  YCSB semantics (must be preserved):
+  - Workloads: A 50% read / 50% update; B 95/5; C 100% read; D 95% read-latest
+    / 5% insert; E 95% scan / 5% insert; F 50% read / 50% read-modify-write.
+  - Keys are "user" + zero padding + number (hashed by default, or ordered).
+    Fields are field1..fieldcount (default 10) of fieldlength chars (default 100).
+  - readallfields (default true) false reads one random field.
+    writeallfields (default false) updates one random field.
+  - Update and ReadModifyWrite are partial updates: unrelated fields must be
+    preserved. Scan includes the start key. A miss returns a Fail response.
+  - Do not add work inside the timed operation that a real client would not
+    do, and do not change consistency levels or driver settings in a way that
+    skews comparisons.
+
+  Conventions:
+  - File-scoped namespaces in src, matching folders (IDbYcsbClient is in
+    NBomber.YCSB.DAL). Tests use block namespaces (NBomber.YCSB.Tests).
+  - Keep changes inside the affected database folder. No new abstraction
+    layers; static helpers per database are the existing pattern.
+  - Use the existing props mechanism for new settings, with defaults that
+    keep current behaviour and the compose environment working.
+  - Preserve existing line endings (CRLF) in edited files.
+
+  Testing:
+  - The Workload_* tests in each <Db>Tests class run real workloads against
+    the database from that folder's docker-compose.yml. CI runs one class per
+    database after `docker compose up --wait`.
+  - Offline helper tests (for example RedisHelperTests, ScyllaDbHelperTests)
+    need no services. Prefer them for pure logic.
+  - Correctness tests must check stored data, not just the operation mix,
+    using unique keys and deleting only their own rows.
+
+  Database safety:
+  - Cleanup is destructive. DeleteAllData flushes the whole Redis DB, drops
+    every non-system MongoDB database, and truncates the benchmark tables.
+    RavenDB InitDb hard-deletes its database. Scylla InitDb drops and
+    recreates ycsb_table.
+  - Never run workload tests, InitDb/DeleteAllData, or `docker compose down -v`
+    against a database without explicit approval. Integration tests must target
+    the project's own local disposable container (check the port is not served
+    by another service), and use exact test-name filters.
+  - Never change credentials, compose files, or CI without explicit approval.
+
+# Per-artifact rules (additive to the schema's guidance).
+rules:
+  proposal:
+    - State which databases are affected and what is explicitly out of scope.
+    - State the impact on benchmark results and cross-database comparability.
+  specs:
+    - Express behaviour in YCSB terms (operation, key, field set, response),
+      with scenarios for partial-field and missing-key cases where relevant.
+  design:
+    - Cover hot-path cost (allocations, round trips, prepared statements) and
+      keep the existing IDbYcsbClient contract unless a change is justified.
+    - Call out any destructive or schema-changing database operation.
+  tasks:
+    - Separate offline test tasks from live-database test tasks, and mark live
+      ones "requires explicit approval to run".
+    - Include a build task (`dotnet build NBomber.YCSB.sln`) and keep each task
+      scoped to one database folder where possible.
+
+operations:
+  apply:
+    guidance:
+      - Run only offline tests. Report every added test that was not executed.
+      - Do not modify application code outside the change's tasks.
+  archive:
+    guidance:
+      - Archive only after explicit user approval.
