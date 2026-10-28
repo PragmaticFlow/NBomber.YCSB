@@ -160,6 +160,60 @@ namespace NBomber.YCSB.Tests
             });
         }
 
+        // Live Redis tests: use unique keys and do not flush the database.
+        [Fact]
+        public async Task Insert_Then_Read_Should_Use_Same_Key_And_Field_Names()
+        {
+            var client = CreateClient();
+            var key = $"test-{Guid.NewGuid()}";
+            var values = new Dictionary<string, string> { ["field0"] = "a", ["field1"] = "b" };
+
+            var insert = await client.Insert("usertable", key, values);
+            var readAll = await client.Read("usertable", key, new HashSet<string>());
+            var readFields = await client.Read("usertable", key, new HashSet<string> { "field0" });
+            var readMissingFields = await client.Read("usertable", key, new HashSet<string> { "nope" });
+
+            Assert.False(insert.IsError);
+            Assert.False(readAll.IsError);
+            Assert.False(readFields.IsError);
+            Assert.True(readMissingFields.IsError);
+        }
+
+        [Fact]
+        public async Task Read_And_ReadModifyWrite_With_Fields_Should_Fail_For_Missing_Key()
+        {
+            var client = CreateClient();
+            var key = $"missing-{Guid.NewGuid()}";
+            var fields = new HashSet<string> { "field0" };
+
+            var read = await client.Read("usertable", key, fields);
+            var rmw = await client.ReadModifyWrite("usertable", key, fields, new Dictionary<string, string> { ["field0"] = "x" });
+
+            Assert.True(read.IsError);
+            Assert.True(rmw.IsError);
+        }
+
+        [Fact]
+        public async Task Scan_With_Fields_Should_Return_Only_Requested_Fields_Size()
+        {
+            var client = CreateClient();
+            var prefix = $"scan-{Guid.NewGuid()}";
+            var values = new Dictionary<string, string> { ["field0"] = "aaaa", ["field1"] = new string('b', 1000) };
+
+            await client.BulkInsert("usertable", new Dictionary<string, Dictionary<string, string>> { [prefix] = values });
+
+            var all = await client.Scan("usertable", prefix, 1, new HashSet<string>());
+            var subset = await client.Scan("usertable", prefix, 1, new HashSet<string> { "field0" });
+
+            Assert.False(subset.IsError);
+            Assert.True(subset.SizeBytes < all.SizeBytes);
+        }
+
+        private static RedisYcsbClient CreateClient()
+        {
+            return new RedisYcsbClient(YcsbCliArgs.ParseProps(["redis.host=localhost", "redis.port=6379"]));
+        }
+
         private Contracts.Stats.NodeStats RunWorkload(Workload workload)
         {
             var settings = new YcsbCliArgs
