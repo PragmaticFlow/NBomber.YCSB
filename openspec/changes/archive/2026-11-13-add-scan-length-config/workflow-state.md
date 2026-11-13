@@ -1,11 +1,11 @@
 # Workflow State: add-scan-length-config
 
 - Request: Implement only `minscanlength` and `maxscanlength` in `YcsbCliArgs`; scanlengthdistribution fixed to uniform; defaults 1..100 for E, 1..1000 otherwise; explicit values override; validate 1 <= min <= max; shared Core in Infra only; research phase, no code yet.
-- Current stage: 7 - Archive (awaiting approval)
-- Status: awaiting-approval
+- Current stage: 7 - Archive (done)
+- Status: archived
 - Plan approved: yes (2026-10-28, edits A-F and implementation plan; typed options, no -p aliases)
 - Correction cycles used: 0/2
-- Archive approved: no
+- Archive approved: yes (2026-11-13, user: "archive it")
 
 ## Decisions
 - 2026-10-28 (user): scanlengthdistribution fixed to uniform; no zipfian scan lengths.
@@ -21,6 +21,8 @@
 - 2026-10-28 Stage 4: code review done. No Critical/High; no correction cycle. 5 Low (test-strength): no parse->validate test, no CLI-level min-only parse test, uniformity is mean-only, int.MaxValue test checks range only, no max=0 validator test.
 - 2026-10-28 Stage 5: openspec-verify-change. 9/9 tasks; 4/4 requirements implemented; 9/9 scenarios covered by tests; design followed exactly; `validate --strict` passes. Orchestrator re-ran: plain build 0 errors/0 warnings (no audit flag), offline tests 42/42, ScanLengthTests 21/21. No critical issues or warnings; 2 suggestions.
 - 2026-10-28 Stage 6: final report delivered.
+- 2026-11-13: user committed and pushed the implementation (72d9ad6 on test-dotnet-subagent).
+- 2026-11-13 Stage 7: archive approved; synced delta to new main spec openspec/specs/core-workload/spec.md (4 requirements) and archived the change.
 
 ## Next Step
 Stage 7: ask the user for explicit archive approval (openspec-archive-change, creates openspec/specs/core-workload/spec.md). Do not commit. (Superseded:)
