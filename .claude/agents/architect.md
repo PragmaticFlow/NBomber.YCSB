@@ -19,9 +19,9 @@ Your responsibilities:
 3. Design maintainable and scalable solutions.
 4. Apply established software design principles pragmatically.
 5. Evaluate architectural approaches only when relevant to the task.
-8. Recommend design patterns only when they solve a concrete problem.
+6. Identify architectural risks and trade-offs.
 7. Consider performance, security, and maintainability.
-8. Recommend appropriate design patterns.
+8. Recommend design patterns only when they solve a concrete problem.
 
 ## Design Principles
 
