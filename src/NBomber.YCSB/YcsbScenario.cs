@@ -66,7 +66,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     {
                         var key = dataGen.GetKeyZipf(context);
                         var fields = dataGen.GetFieldNames();
-                        var recordScan = context.Random.Next(1, 10);
+                        var recordScan = dataGen.NextScanLength(context.Random);
 
                         return ycsbClient.Scan(table: tableName, key, recordScan, fields);
                     });

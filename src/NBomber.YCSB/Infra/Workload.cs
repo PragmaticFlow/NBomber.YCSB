@@ -128,4 +128,18 @@ public static class WorkloadManager
             _ => ""
         };
     }
+
+    /// <summary>
+    /// Returns the default maximum scan length for the given workload (100 for E, 1000 otherwise).
+    /// </summary>
+    /// <param name="workload">The workload type.</param>
+    /// <returns>The default maximum number of records per scan.</returns>
+    public static int GetDefaultMaxScanLength(Workload workload)
+    {
+        return workload switch
+        {
+            Workload.E => 100,
+            _ => 1000
+        };
+    }
 }

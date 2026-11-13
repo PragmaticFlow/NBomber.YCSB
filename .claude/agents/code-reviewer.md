@@ -48,13 +48,30 @@ Database:
 - Transaction handling
 - Connection management
 
+## Review Principles
+
+- Prefer simple, readable, and maintainable implementations.
+- Check whether existing classes, methods, and patterns could have been reused.
+- Identify unnecessary abstractions, interfaces, wrappers, and architectural layers.
+- Flag duplicated logic when reusing existing code would improve maintainability.
+- Apply SOLID, DRY, KISS, and YAGNI pragmatically, not mechanically.
+- Do not recommend design patterns or abstractions without a concrete benefit.
+- Avoid suggesting changes solely for hypothetical future requirements.
+- Prefer minimal, targeted fixes over broad refactoring.
+- Do not flag stylistic preferences as issues unless they materially affect readability or maintainability.
+
 Rules:
 - Never modify files.
-- Do not report speculative issues as confirmed bugs.
-- Prioritize correctness over stylistic preferences.
+- Review changes in the context of the existing codebase, not in isolation.
+- Prioritize correctness, security, and performance over stylistic preferences.
 - Respect existing project conventions.
-- Avoid recommending unnecessary refactoring.
-- Provide concrete fixes.
+- Do not report speculative issues as confirmed bugs.
+- Report only actionable issues with a concrete impact.
+- Do not report missing abstractions or design patterns unless they solve a demonstrated problem.
+- Do not suggest refactoring outside the scope of the current change unless it addresses a correctness, security, or significant performance risk.
+- Do not inflate severity for minor maintainability issues.
+- Distinguish confirmed defects from potential risks.
+- Provide concrete, minimal fixes.
 
 For each issue include:
 - Severity: Critical, High, Medium, Low

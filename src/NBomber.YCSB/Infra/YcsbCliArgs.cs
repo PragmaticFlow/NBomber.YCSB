@@ -17,6 +17,8 @@ public class YcsbCliArgs
     public int ZeroPadding { get; set; } = 1;
     public string InsertOrder { get; set; } = "hashed";
     public IEnumerable<string> Props { get; set; } = [];
+    public int MinScanLength { get; set; } = 1;
+    public int? MaxScanLength { get; set; }
 
     private static readonly Option<Workload> WorkloadOpt = new("--workload")
     {
@@ -82,6 +84,18 @@ public class YcsbCliArgs
         AllowMultipleArgumentsPerToken = true
     };
 
+    private static readonly Option<int> MinScanLengthOpt = new("--minscanlength")
+    {
+        Description = "Minimum number of records per scan (default: 1)",
+        DefaultValueFactory = _ => 1
+    };
+    private static readonly Option<int?> MaxScanLengthOpt = new("--maxscanlength")
+    {
+        Description = "Maximum number of records per scan (default: 100 for workload E, 1000 otherwise)"
+    };
+
+    public int GetMaxScanLength() => MaxScanLength ?? WorkloadManager.GetDefaultMaxScanLength(Workload);
+
     public static void AddOptionsTo(Command command)
     {
         command.Options.Add(WorkloadOpt);
@@ -97,6 +111,8 @@ public class YcsbCliArgs
         command.Options.Add(ZeroPaddingOpt);
         command.Options.Add(InsertOrderOpt);
         command.Options.Add(PropsOpt);
+        command.Options.Add(MinScanLengthOpt);
+        command.Options.Add(MaxScanLengthOpt);
     }
 
     public static YcsbCliArgs FromParseResult(ParseResult p) => new()
@@ -113,7 +129,9 @@ public class YcsbCliArgs
         WriteAllFields = p.GetValue(WriteAllFieldsOpt),
         ZeroPadding    = p.GetValue(ZeroPaddingOpt),
         InsertOrder    = p.GetValue(InsertOrderOpt) ?? "hashed",
-        Props          = p.GetValue(PropsOpt) ?? []
+        Props          = p.GetValue(PropsOpt) ?? [],
+        MinScanLength  = p.GetValue(MinScanLengthOpt),
+        MaxScanLength  = p.GetValue(MaxScanLengthOpt)
     };
 
     public static Dictionary<string, string> ParseProps(IEnumerable<string> props)
