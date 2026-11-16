@@ -95,10 +95,13 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
             await ycsbClient.BulkInsert(tableName, list);
         })
-        .WithWarmUpDuration(TimeSpan.FromSeconds(3))
         .WithLoadSimulations(
             Simulation.IterationsForConstant(copies: settings.ThreadCount, iterations: settings.OperationCount)
         );
+
+        scenario = settings.WarmUp > 0
+            ? scenario.WithWarmUpDuration(TimeSpan.FromSeconds(settings.WarmUp))
+            : scenario.WithoutWarmUp();
 
         var runner = NBomberRunner
                .RegisterScenarios(scenario)

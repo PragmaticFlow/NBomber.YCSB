@@ -11,6 +11,12 @@ The YCSB framework also automates or simplifies essential benchmarking process t
 - Collecting and storing performance data
 - Creating a new interface layer for benchmarking
 
+## Warm-up
+
+By default there is no warm-up, as in YCSB: the database receives exactly `operationcount` operations, all measured. Use `--warmup <seconds>` to add a warm-up before measurement. Warm-up operations are extra, are not measured and change data, and because warm-up is time-capped a faster database runs more of them.
+
+Results produced before this option existed used a fixed 3-second warm-up and may not be directly comparable. `--warmup 3` reproduces that behaviour.
+
 ## Links
 
 - [Our project docs](https://nbomber.com/docs/load-testing-databases/overview)

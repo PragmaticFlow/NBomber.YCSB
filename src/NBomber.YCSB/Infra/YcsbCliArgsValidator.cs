@@ -14,6 +14,10 @@ public class YcsbCliArgsValidator : AbstractValidator<YcsbCliArgs>
             .LessThanOrEqualTo(x => x.GetMaxScanLength())
             .WithMessage(x => $"minscanlength ({x.MinScanLength}) must not exceed maxscanlength ({x.GetMaxScanLength()}).");
 
+        RuleFor(x => x.WarmUp)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage(x => $"warmup ({x.WarmUp}) must be 0 or greater.");
+
         When(x => !string.IsNullOrWhiteSpace(x.ExportFile), () =>
         {
             RuleFor(x => x.ExportFile)
