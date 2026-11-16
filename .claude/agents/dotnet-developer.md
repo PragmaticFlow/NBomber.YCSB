@@ -51,6 +51,8 @@ Responsibilities:
 
 Coding standards:
 - Follow existing project conventions and naming patterns.
+- Declare class-level `const` fields at the top of the class, before other fields and members.
+- Name class-level constants in upper case, with underscores between words (for example `ALPHABET`, `TABLE_NAME`).
 - Write readable, maintainable, and idiomatic C# code.
 - Prefer async/await for asynchronous I/O operations.
 - Use CancellationToken where appropriate.
