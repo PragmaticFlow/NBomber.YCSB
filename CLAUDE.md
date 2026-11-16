@@ -13,7 +13,7 @@ dotnet build NBomber.YCSB.sln          # NuGet audit warnings NU1900-NU1904 are 
 dotnet run --project src/NBomber.YCSB -- run --workload A --db redis -p redis.host=localhost -p redis.port=6379
 
 # Offline tests (no database needed)
-dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests"
+dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~DataGeneratorTests|FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests"
 
 # Single test
 dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName=NBomber.YCSB.Tests.ScanLengthTests.Validator_Accepts_Defaults"
@@ -36,7 +36,7 @@ Only run live tests against the project's own disposable containers, after check
 
 Flow: `Program.cs` parses the `run` command into `YcsbCliArgs`, validates it with `YcsbCliArgsValidator` (FluentValidation), picks a client in `GetYcsbClient` by `--db`, then calls `YcsbScenario.Run`.
 
-- `YcsbScenario` builds one NBomber scenario. Init runs `InitDb`, then `DeleteAllData`, then `BulkInsert` of `recordcount` generated records. Each iteration picks an operation with `context.Random.Choice` over the workload's weighted operations and runs it as a named step. The load is `IterationsForConstant(threadcount, operationcount)`; `operationcount` is a total across copies, like YCSB. Step names (`read`, `update`, `insert`, `scan`, `read latest`, `read-modify-write`) are asserted by the live tests, so don't rename them.
+- `YcsbScenario` builds one NBomber scenario. Init runs `InitDb`, then `DeleteAllData`, then `BulkInsert` of `recordcount` generated records. Each iteration picks an operation with `context.Random.Choice` over the workload's weighted operations and runs it as a named step. The load is `IterationsForConstant(threadcount, operationcount)`; `operationcount` is a total across copies, like YCSB. Step names (`read`, `update`, `insert`, `scan`, `read latest`, `read-modify-write`) are asserted by the live tests, so don't rename them. There is no warm-up unless `--warmup <seconds>` is set; warm-up operations are extra, unmeasured and change data.
 - `src/NBomber.YCSB/Infra` holds the shared YCSB Core. Keep Core behaviour here, not in database clients:
   - `YcsbCliArgs`: typed options for Core settings (`--fieldcount`, `--minscanlength`, ...), plus `-p key=value` props that are passed to the database client.
   - `Workload.cs`: `WorkloadManager` per-workload presets (operation mix, defaults such as max scan length).
@@ -50,6 +50,7 @@ Flow: `Program.cs` parses the `run` command into `YcsbCliArgs`, validates it wit
 - `MessagePack` in `NBomber.YCSB.csproj` is not used by our code. It pins NBomber's transitive dependency to a patched version; do not remove it, or the build fails the NuGet audit.
 - `PostgresNoSQLYcsbClient` keeps its `NpgsqlDataSource` in a static field that each new instance replaces.
 - Offline helper tests (`*HelperTests`, `ScanLengthTests`) are not run by CI, which only filters the per-database live test classes.
+- Results produced before `--warmup` existed used a fixed 3-second warm-up and may not be directly comparable with default (no warm-up) runs; `--warmup 3` reproduces the old behaviour.
 - Known deviations from Java YCSB are tracked as future OpenSpec changes: Zipf constant 1.3 instead of scrambled 0.99, no acknowledged-insert counter, xxHash instead of FNV, 1-based keys and `field1..N` names, the whole dataset built in memory, MongoDB/RavenDB/Scylla scan semantics.
 
 ## Workflow (OpenSpec + subagents)

@@ -19,6 +19,7 @@ public class YcsbCliArgs
     public IEnumerable<string> Props { get; set; } = [];
     public int MinScanLength { get; set; } = 1;
     public int? MaxScanLength { get; set; }
+    public int WarmUp { get; set; } = 0;
 
     private static readonly Option<Workload> WorkloadOpt = new("--workload")
     {
@@ -93,6 +94,11 @@ public class YcsbCliArgs
     {
         Description = "Maximum number of records per scan (default: 100 for workload E, 1000 otherwise)"
     };
+    private static readonly Option<int> WarmUpOpt = new("--warmup")
+    {
+        Description = "Warm-up duration in seconds before measurement; warm-up operations run against the database but are not measured (default: 0, as in YCSB)",
+        DefaultValueFactory = _ => 0
+    };
 
     public int GetMaxScanLength() => MaxScanLength ?? WorkloadManager.GetDefaultMaxScanLength(Workload);
 
@@ -113,6 +119,7 @@ public class YcsbCliArgs
         command.Options.Add(PropsOpt);
         command.Options.Add(MinScanLengthOpt);
         command.Options.Add(MaxScanLengthOpt);
+        command.Options.Add(WarmUpOpt);
     }
 
     public static YcsbCliArgs FromParseResult(ParseResult p) => new()
@@ -131,7 +138,8 @@ public class YcsbCliArgs
         InsertOrder    = p.GetValue(InsertOrderOpt) ?? "hashed",
         Props          = p.GetValue(PropsOpt) ?? [],
         MinScanLength  = p.GetValue(MinScanLengthOpt),
-        MaxScanLength  = p.GetValue(MaxScanLengthOpt)
+        MaxScanLength  = p.GetValue(MaxScanLengthOpt),
+        WarmUp         = p.GetValue(WarmUpOpt)
     };
 
     public static Dictionary<string, string> ParseProps(IEnumerable<string> props)
