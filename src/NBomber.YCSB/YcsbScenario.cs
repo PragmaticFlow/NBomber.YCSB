@@ -23,16 +23,23 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             {
                 case OperationType.Insert:
                 {
-                    var key = dataGen.GetKeyNext();
                     var values = dataGen.CreateValues();
+                    var (keyNum, key) = dataGen.GetKeyNext();
 
-                    await Step.Run("insert", context, () => ycsbClient.Insert(table: tableName, key, values));
+                    try
+                    {
+                        await Step.Run("insert", context, () => ycsbClient.Insert(table: tableName, key, values));
+                    }
+                    finally
+                    {
+                        dataGen.AcknowledgeInsert(keyNum);
+                    }
                     break;
                 }
 
                 case OperationType.Read:
                 {
-                    var key = dataGen.GetKeyZipf(context);
+                    var key = dataGen.GetKeyZipf(context.Random);
                     var fields = dataGen.GetFieldNames();
 
                     await Step.Run("read", context, () => ycsbClient.Read(table: tableName, key, fields));
@@ -41,7 +48,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
                 case OperationType.ReadLatest:
                 {
-                    var key = dataGen.GetKeyLatest(context);
+                    var key = dataGen.GetKeyLatest(context.Random);
                     var fields = dataGen.GetFieldNames();
 
                     await Step.Run("read latest", context, () => ycsbClient.Read(table: tableName, key, fields));
@@ -50,7 +57,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
                 case OperationType.Update:
                 {
-                    var key = dataGen.GetKeyZipf(context);
+                    var key = dataGen.GetKeyZipf(context.Random);
                     var values = dataGen.CreateValuesToUpdate();
 
                     await Step.Run("update", context, () => ycsbClient.Update(table: tableName, key, values));
@@ -59,7 +66,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
                 case OperationType.Scan:
                 {
-                    var key = dataGen.GetKeyZipf(context);
+                    var key = dataGen.GetKeyZipf(context.Random);
                     var fields = dataGen.GetFieldNames();
                     var recordScan = dataGen.NextScanLength(context.Random);
 
@@ -69,7 +76,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
                 case OperationType.ReadModifyWrite:
                 {
-                    var key = dataGen.GetKeyZipf(context);
+                    var key = dataGen.GetKeyZipf(context.Random);
                     var fields = dataGen.GetFieldNames();
                     var updateValues = dataGen.CreateValuesToUpdate();
 
@@ -87,8 +94,6 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             var list = dataGen.GenerateRandoms();
 
             await ycsbClient.BulkInsert(tableName, list);
-
-            dataGen.SetRecordCount(settings.RecordCount);
         })
         .WithWarmUpDuration(TimeSpan.FromSeconds(3))
         .WithLoadSimulations(
