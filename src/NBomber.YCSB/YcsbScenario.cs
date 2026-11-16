@@ -22,66 +22,60 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             switch (operation)
             {
                 case OperationType.Insert:
-                    await Step.Run("insert", context, () =>
-                    {
-                        var key = dataGen.GetKeyNext();
-                        var values = dataGen.CreateValues();
+                {
+                    var key = dataGen.GetKeyNext();
+                    var values = dataGen.CreateValues();
 
-                        return ycsbClient.Insert(table: tableName, key, values);
-                    });
+                    await Step.Run("insert", context, () => ycsbClient.Insert(table: tableName, key, values));
                     break;
+                }
 
                 case OperationType.Read:
-                    await Step.Run("read", context, () =>
-                    {
-                        var key = dataGen.GetKeyZipf(context);
-                        var fields = dataGen.GetFieldNames();
+                {
+                    var key = dataGen.GetKeyZipf(context);
+                    var fields = dataGen.GetFieldNames();
 
-                        return ycsbClient.Read(table: tableName, key, fields);
-                    });
+                    await Step.Run("read", context, () => ycsbClient.Read(table: tableName, key, fields));
                     break;
+                }
 
                 case OperationType.ReadLatest:
-                    await Step.Run("read latest", context, () =>
-                    {
-                        var key = dataGen.GetKeyLatest(context);
-                        var fields = dataGen.GetFieldNames();
+                {
+                    var key = dataGen.GetKeyLatest(context);
+                    var fields = dataGen.GetFieldNames();
 
-                        return ycsbClient.Read(table: tableName, key, fields);
-                    });
+                    await Step.Run("read latest", context, () => ycsbClient.Read(table: tableName, key, fields));
                     break;
+                }
 
                 case OperationType.Update:
-                    await Step.Run("update", context, () =>
-                    {
-                        var key = dataGen.GetKeyZipf(context);
-                        var values = dataGen.CreateValuesToUpdate();
+                {
+                    var key = dataGen.GetKeyZipf(context);
+                    var values = dataGen.CreateValuesToUpdate();
 
-                        return ycsbClient.Update(table: tableName, key, values);
-                    });
+                    await Step.Run("update", context, () => ycsbClient.Update(table: tableName, key, values));
                     break;
+                }
 
                 case OperationType.Scan:
-                    await Step.Run("scan", context, () =>
-                    {
-                        var key = dataGen.GetKeyZipf(context);
-                        var fields = dataGen.GetFieldNames();
-                        var recordScan = dataGen.NextScanLength(context.Random);
+                {
+                    var key = dataGen.GetKeyZipf(context);
+                    var fields = dataGen.GetFieldNames();
+                    var recordScan = dataGen.NextScanLength(context.Random);
 
-                        return ycsbClient.Scan(table: tableName, key, recordScan, fields);
-                    });
+                    await Step.Run("scan", context, () => ycsbClient.Scan(table: tableName, key, recordScan, fields));
                     break;
+                }
 
                 case OperationType.ReadModifyWrite:
-                    await Step.Run("read-modify-write", context, async () =>
-                    {
-                        var key = dataGen.GetKeyZipf(context);
-                        var fields = dataGen.GetFieldNames();
-                        var updateValues = dataGen.CreateValuesToUpdate();
+                {
+                    var key = dataGen.GetKeyZipf(context);
+                    var fields = dataGen.GetFieldNames();
+                    var updateValues = dataGen.CreateValuesToUpdate();
 
-                        return await ycsbClient.ReadModifyWrite(table: tableName, key, fields, updateValues);
-                    });
+                    await Step.Run("read-modify-write", context, () => ycsbClient.ReadModifyWrite(table: tableName, key, fields, updateValues));
                     break;
+                }
             }
             return Response.Ok();
         })

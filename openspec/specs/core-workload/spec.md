@@ -53,3 +53,54 @@ The configuration SHALL be rejected before the benchmark starts unless 1 <= mins
 #### Scenario: Minimum above workload default maximum
 - **WHEN** workload E is configured with minscanlength 200 and no maxscanlength
 - **THEN** validation fails because the effective maximum is 100
+
+### Requirement: Operation latency covers only the database call
+For every operation (read, read latest, update, insert, scan, read-modify-write), the key, field set, values and scan length SHALL be prepared before the operation's latency measurement starts, so the measured latency covers only the database call, as in original YCSB.
+
+#### Scenario: Insert inputs prepared before timing
+- **WHEN** an insert operation runs
+- **THEN** its key and all field values are generated before the insert's measured step starts, and the step only sends them to the database
+
+#### Scenario: Read inputs prepared before timing
+- **WHEN** a read operation with readallfields false runs
+- **THEN** its key and the single field name are chosen before the read's measured step starts
+
+#### Scenario: Operation names and mix unchanged
+- **WHEN** any workload A-F runs
+- **THEN** the operations are reported under the same names and in the same proportions as before
+
+### Requirement: Generated field values
+Each generated field value SHALL be exactly fieldlength characters, each a lowercase letter a to z.
+
+#### Scenario: Default field length
+- **WHEN** a record is generated with fieldlength 100
+- **THEN** every field value is 100 characters long and contains only the letters a to z
+
+#### Scenario: Field length of one
+- **WHEN** a record is generated with fieldlength 1
+- **THEN** every field value is a single lowercase letter
+
+### Requirement: Field set of generated records
+An inserted record and an update with writeallfields true SHALL contain exactly the fields field1 to fieldN, where N is fieldcount, each with a generated value.
+
+#### Scenario: Full record
+- **WHEN** a record is generated with fieldcount 10
+- **THEN** it has exactly the fields field1 to field10
+
+### Requirement: Single field selection
+When readallfields is false a read SHALL request one field, and when writeallfields is false an update SHALL write one field, each chosen uniformly at random from field1 to fieldN.
+
+#### Scenario: Selection stays within the field set
+- **WHEN** many single-field reads and updates are generated with fieldcount 10
+- **THEN** every chosen field is one of field1 to field10, and both field1 and field10 are chosen
+
+#### Scenario: Single field record
+- **WHEN** fieldcount is 1 and a single field is chosen
+- **THEN** the chosen field is field1
+
+### Requirement: Concurrent data generation
+Generation of keys, field names and values SHALL be safe and independent across concurrent scenario copies, without a lock shared by all copies.
+
+#### Scenario: Parallel generation
+- **WHEN** many records and single-field choices are generated in parallel from several threads
+- **THEN** no exception occurs and every result satisfies the field value and field set requirements

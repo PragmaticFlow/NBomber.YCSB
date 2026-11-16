@@ -1,5 +1,4 @@
-﻿using Bogus;
-using NBomber.Contracts;
+﻿using NBomber.Contracts;
 using NBomber.CSharp;
 using Standart.Hash.xxHash;
 
@@ -7,6 +6,8 @@ namespace NBomber.YCSB.Infra;
 
 public class DataGenerator(YcsbCliArgs settings)
 {
+    private const string ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+
     private readonly int _zeroPadding = settings.ZeroPadding;
     private readonly int _fieldCount = settings.FieldCount;
     private readonly int _fieldLength = settings.FieldLength;
@@ -15,8 +16,7 @@ public class DataGenerator(YcsbCliArgs settings)
     private readonly bool _writeAllFields = settings.WriteAllFields;
     private readonly int _minScanLength = settings.MinScanLength;
     private readonly int _maxScanLength = settings.GetMaxScanLength();
-    private readonly ThreadLocal<Faker> _faker = new(() => new Faker());
-    
+
     private ulong _recordCount = settings.RecordCount;
 
     public void SetRecordCount(ulong insertedCount)
@@ -97,7 +97,7 @@ public class DataGenerator(YcsbCliArgs settings)
         }
         else
         {
-            var randomFieldIndex = _faker.Value!.Random.Int(1, _fieldCount);
+            var randomFieldIndex = Random.Shared.Next(1, _fieldCount + 1);
             return new Dictionary<string, string>
             {
                 [$"field{randomFieldIndex}"] = GenerateFieldValue()
@@ -109,7 +109,7 @@ public class DataGenerator(YcsbCliArgs settings)
     {
         if (!_readAllFields)
         {
-            var randomFieldIndex = _faker.Value!.Random.Int(1, _fieldCount);
+            var randomFieldIndex = Random.Shared.Next(1, _fieldCount + 1);
             return new HashSet<string> { $"field{randomFieldIndex}" };
         }
         else
@@ -139,7 +139,11 @@ public class DataGenerator(YcsbCliArgs settings)
 
     private string GenerateFieldValue()
     {
-        return _faker.Value!.Random.String2(_fieldLength, "abcdefghijklmnopqrstuvwxyz");
+        return string.Create(_fieldLength, 0, static (chars, _) =>
+        {
+            for (var i = 0; i < chars.Length; i++)
+                chars[i] = ALPHABET[Random.Shared.Next(ALPHABET.Length)];
+        });
     }
 
     private string[] GenerateFields()
