@@ -330,7 +330,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error during delete all data: {ex.Message}");
-            return Response.Fail(statusCode: "data clean failed");
+            throw;
         }
     }
 }

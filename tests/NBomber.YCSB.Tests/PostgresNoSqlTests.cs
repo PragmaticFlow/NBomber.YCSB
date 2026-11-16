@@ -408,6 +408,19 @@ namespace NBomber.YCSB.Tests
             }
         }
 
+        [Fact]
+        public async Task DeleteAllData_Throws_When_Database_Is_Unreachable()
+        {
+            // Port 1 is unused, so the connection fails and touches no database.
+            var props = CreateProps();
+            props["postgres.host"] = "127.0.0.1";
+            props["postgres.port"] = "1";
+
+            var client = new PostgresNoSQLYcsbClient(props);
+
+            await Assert.ThrowsAnyAsync<NpgsqlException>(() => client.DeleteAllData());
+        }
+
         private static Dictionary<string, string> CreateProps()
         {
             return YcsbCliArgs.ParseProps([

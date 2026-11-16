@@ -30,6 +30,13 @@ Your responsibilities:
 - Avoid introducing new layers, interfaces, or abstractions without a concrete justification.
 - Do not design for hypothetical future requirements.
 
+## Database Fix First
+
+When a problem shows up in one database backend (or is caused by how a client behaves), first analyse whether it can be fixed inside that database client (`src/NBomber.YCSB/<Db>/`) so the shared Core (`YcsbScenario`, `Infra`, `IDbYcsbClient`) stays unchanged.
+- Recommend a Core change only when a client-level fix is impossible or would not fix the problem (for example, the behaviour is shared by all databases, or the Core contract itself is wrong).
+- When you do recommend a Core change, state explicitly why a client-level fix is not possible.
+- Compare both options briefly (scope, files, risk, which databases are affected) before recommending one.
+
 Technology stack:
 - C# / .NET
 - ASP.NET Core Web API
