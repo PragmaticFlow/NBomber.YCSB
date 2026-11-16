@@ -4,6 +4,8 @@ namespace NBomber.YCSB.Tests
 {
     public class DataGeneratorTests
     {
+        private const int LATEST_SEED = 12345;
+        private const int ZIPF_SEED = 6789;
         private const int Draws = 10_000;
 
         private static void AssertValues(Dictionary<string, string> values, int fieldCount, int fieldLength)
@@ -129,11 +131,114 @@ namespace NBomber.YCSB.Tests
             var dataGen = new DataGenerator(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = 1000 });
             var keys = new string[count];
 
-            Parallel.For(0, count, i => keys[i] = dataGen.GetKeyNext());
+            Parallel.For(0, count, i => keys[i] = dataGen.GetKeyNext().Key);
 
             var expected = Enumerable.Range(1001, count).Select(n => $"user{n}").ToHashSet();
             Assert.Equal(count, keys.Distinct().Count());
             Assert.True(expected.SetEquals(keys));
+        }
+
+        private static DataGenerator CreateOrdered(ulong recordCount = 1000) =>
+            new(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = recordCount });
+
+        private static ulong KeyNumber(string key) => ulong.Parse(key["user".Length..]);
+
+        [Fact]
+        public void LastAcknowledgedKey_Starts_At_RecordCount()
+        {
+            Assert.Equal(1000UL, CreateOrdered().LastAcknowledgedKey);
+        }
+
+        [Fact]
+        public void AcknowledgeInsert_Out_Of_Order_Advances_Only_Contiguously()
+        {
+            var dataGen = CreateOrdered();
+            Assert.Equal(1001UL, dataGen.GetKeyNext().KeyNum);
+            Assert.Equal(1002UL, dataGen.GetKeyNext().KeyNum);
+            Assert.Equal(1003UL, dataGen.GetKeyNext().KeyNum);
+
+            dataGen.AcknowledgeInsert(1003);
+            Assert.Equal(1000UL, dataGen.LastAcknowledgedKey);
+
+            dataGen.AcknowledgeInsert(1001);
+            Assert.Equal(1001UL, dataGen.LastAcknowledgedKey);
+
+            dataGen.AcknowledgeInsert(1002);
+            Assert.Equal(1003UL, dataGen.LastAcknowledgedKey);
+        }
+
+        [Fact]
+        public void AcknowledgeInsert_Duplicate_Does_Not_Change_Limit()
+        {
+            var dataGen = CreateOrdered();
+            dataGen.GetKeyNext();
+
+            dataGen.AcknowledgeInsert(1001);
+            dataGen.AcknowledgeInsert(1001);
+
+            Assert.Equal(1001UL, dataGen.LastAcknowledgedKey);
+        }
+
+        [Fact]
+        public void GetKeyLatest_Never_Returns_Unacknowledged_Key()
+        {
+            var dataGen = CreateOrdered();
+            var random = new Random(LATEST_SEED);
+            dataGen.GetKeyNext();
+
+            var seen = new HashSet<ulong>();
+            for (var i = 0; i < Draws; i++)
+                seen.Add(KeyNumber(dataGen.GetKeyLatest(random)));
+
+            Assert.Contains(1000UL, seen);
+            Assert.True(seen.Max() <= 1000UL);
+
+            dataGen.AcknowledgeInsert(1001);
+            seen.Clear();
+            for (var i = 0; i < Draws; i++)
+                seen.Add(KeyNumber(dataGen.GetKeyLatest(random)));
+
+            Assert.Contains(1001UL, seen);
+            Assert.True(seen.Max() <= 1001UL);
+        }
+
+        [Fact]
+        public void GetKeyZipf_Never_Returns_Unacknowledged_Key()
+        {
+            var dataGen = CreateOrdered(recordCount: 2);
+            var random = new Random(ZIPF_SEED);
+            dataGen.GetKeyNext();
+
+            var seen = new HashSet<ulong>();
+            for (var i = 0; i < Draws; i++)
+                seen.Add(KeyNumber(dataGen.GetKeyZipf(random)));
+
+            Assert.True(seen.SetEquals([1UL, 2UL]));
+
+            dataGen.AcknowledgeInsert(3);
+            for (var i = 0; i < Draws; i++)
+                seen.Add(KeyNumber(dataGen.GetKeyZipf(random)));
+
+            Assert.Contains(3UL, seen);
+        }
+
+        [Fact]
+        public void Reserve_And_Acknowledge_Are_Safe_Under_Parallel_Use()
+        {
+            const int count = 10_000;
+            var dataGen = CreateOrdered();
+            var keyNums = new ulong[count];
+
+            Parallel.For(0, count, i =>
+            {
+                var (keyNum, _) = dataGen.GetKeyNext();
+                keyNums[i] = keyNum;
+                dataGen.AcknowledgeInsert(keyNum);
+            });
+
+            Assert.True(Enumerable.Range(1001, count).Select(n => (ulong)n).ToHashSet().SetEquals(keyNums));
+            Assert.Equal(count, keyNums.Distinct().Count());
+            Assert.Equal(11000UL, dataGen.LastAcknowledgedKey);
         }
     }
 }

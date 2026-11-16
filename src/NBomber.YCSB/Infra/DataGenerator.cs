@@ -1,5 +1,4 @@
-﻿using NBomber.Contracts;
-using NBomber.CSharp;
+﻿using NBomber.CSharp;
 using Standart.Hash.xxHash;
 
 namespace NBomber.YCSB.Infra;
@@ -17,37 +16,52 @@ public class DataGenerator(YcsbCliArgs settings)
     private readonly int _minScanLength = settings.MinScanLength;
     private readonly int _maxScanLength = settings.GetMaxScanLength();
 
-    private ulong _recordCount = settings.RecordCount;
+    private readonly ulong _recordCount = settings.RecordCount;   // initial load size, used by GenerateRandoms
+    private readonly object _ackLock = new();
+    private readonly HashSet<ulong> _pendingAcks = [];
 
-    public void SetRecordCount(ulong insertedCount)
-    {
-        _recordCount = insertedCount;
-    }  
+    private ulong _lastInsertKey = settings.RecordCount;          // last reserved insert key
+    private ulong _lastAcknowledgedKey = settings.RecordCount;    // highest contiguous acknowledged key
 
     public int NextScanLength(Random random) => (int)random.NextInt64(_minScanLength, (long)_maxScanLength + 1);
+    public ulong LastAcknowledgedKey => Interlocked.Read(ref _lastAcknowledgedKey);
 
-    public string GetKeyNext()
+    public (ulong KeyNum, string Key) GetKeyNext()
     {
-        var keyNum = Interlocked.Increment(ref _recordCount);
-        return BuildKeyName(keyNum, _zeroPadding);
+        var keyNum = Interlocked.Increment(ref _lastInsertKey);
+        return (keyNum, BuildKeyName(keyNum, _zeroPadding));
     }
 
-    public string GetKeyZipf(IScenarioContext context)
+    public void AcknowledgeInsert(ulong keyNum)
     {
-        var keyNum = context.Random.Zipf((int)_recordCount, 1.3);
+        lock (_ackLock)
+        {
+            _pendingAcks.Add(keyNum);
+
+            var limit = _lastAcknowledgedKey;
+            while (_pendingAcks.Remove(limit + 1))
+                limit++;
+
+            Interlocked.Exchange(ref _lastAcknowledgedKey, limit);
+        }
+    }
+
+    public string GetKeyZipf(Random random)
+    {
+        var keyNum = random.Zipf((int)LastAcknowledgedKey, 1.3);
         return BuildKeyName((ulong)keyNum, _zeroPadding);
     }
 
-    public string GetKeyLatest(IScenarioContext context, double theta = 0.99)
+    public string GetKeyLatest(Random random, double theta = 0.99)
     {
-        var max = Interlocked.Read(ref _recordCount);
+        var max = LastAcknowledgedKey;
 
         if (max <= 1UL)
             return BuildKeyName(1UL, _zeroPadding);
 
         var min = Math.Min(max, int.MaxValue);
 
-        var rundom = context.Random.Zipf((int)min, theta);
+        var rundom = random.Zipf((int)min, theta);
 
         var offset = (ulong)(rundom - 1);
 
