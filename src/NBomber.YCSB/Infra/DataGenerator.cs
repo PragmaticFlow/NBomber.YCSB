@@ -23,8 +23,11 @@ public class DataGenerator(YcsbCliArgs settings)
     private ulong _lastInsertKey = settings.RecordCount;          // last reserved insert key
     private ulong _lastAcknowledgedKey = settings.RecordCount;    // highest contiguous acknowledged key
 
+    private readonly long _zipfianItemCount = GetZipfianItemCount(settings);
+
     public int NextScanLength(Random random) => (int)random.NextInt64(_minScanLength, (long)_maxScanLength + 1);
     public ulong LastAcknowledgedKey => Interlocked.Read(ref _lastAcknowledgedKey);
+    public long ZipfianItemCount => _zipfianItemCount;
 
     public (ulong KeyNum, string Key) GetKeyNext()
     {
@@ -48,8 +51,9 @@ public class DataGenerator(YcsbCliArgs settings)
 
     public string GetKeyZipf(Random random)
     {
-        var keyNum = random.Zipf((int)LastAcknowledgedKey, 1.3);
-        return BuildKeyName((ulong)keyNum, _zeroPadding);
+        // the constructor rejects recordcount 0 for workloads that call this, so LastAcknowledgedKey >= 1
+        var keyNum = random.ScrambledZipf(_zipfianItemCount, LastAcknowledgedKey);
+        return BuildKeyName(keyNum, _zeroPadding);
     }
 
     public string GetKeyLatest(Random random, double theta = 0.99)
@@ -128,6 +132,32 @@ public class DataGenerator(YcsbCliArgs settings)
         }
         else
             return null;
+    }
+
+    private static long GetZipfianItemCount(YcsbCliArgs settings)
+    {
+        var operations = WorkloadManager.GetOperations(settings.Workload);
+        var usesZipfian = operations.Any(o => o.Item1 is OperationType.Read or OperationType.Update
+                                                      or OperationType.Scan or OperationType.ReadModifyWrite);
+        if (usesZipfian && settings.RecordCount == 0)
+            throw new ArgumentException(
+                $"recordcount must be at least 1 for workload {settings.Workload}: read, update, scan and read-modify-write choose keys from loaded records.",
+                nameof(settings));
+
+        var insertProportion = (double)operations.Where(o => o.Item1 == OperationType.Insert).Sum(o => o.Item2)
+                               / operations.Sum(o => o.Item2);
+        var expectedNewKeys = Math.Max(0, (long)(settings.OperationCount * insertProportion * 2.0));
+
+        // + 1: YCSB builds ScrambledZipfianGenerator(insertstart, insertstart + insertcount + expectednewkeys),
+        // an inclusive range (CoreWorkload.java L519, ScrambledZipfianGenerator.java L87).
+        try
+        {
+            return checked((long)settings.RecordCount + expectedNewKeys + 1);
+        }
+        catch (OverflowException)
+        {
+            throw new ArgumentException($"recordcount ({settings.RecordCount}) is too large for zipfian key choice.", nameof(settings));
+        }
     }
 
     private string BuildKeyName(ulong keyNum, int zeroPadding)
