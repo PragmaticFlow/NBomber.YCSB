@@ -51,7 +51,8 @@ Flow: `Program.cs` parses the `run` command into `YcsbCliArgs`, validates it wit
 - `PostgresNoSQLYcsbClient` keeps its `NpgsqlDataSource` in a static field that each new instance replaces.
 - Offline helper tests (`*HelperTests`, `ScanLengthTests`) are not run by CI, which only filters the per-database live test classes.
 - Results produced before `--warmup` existed used a fixed 3-second warm-up and may not be directly comparable with default (no warm-up) runs; `--warmup 3` reproduces the old behaviour.
-- Known deviations from Java YCSB are tracked as future OpenSpec changes: Zipf constant 1.3 instead of scrambled 0.99, no acknowledged-insert counter, xxHash instead of FNV, 1-based keys and `field1..N` names, the whole dataset built in memory, MongoDB/RavenDB/Scylla scan semantics.
+- Read, update, scan and read-modify-write choose keys with YCSB's scrambled zipfian (0.99) in `DataGenerator.GetKeyZipf`. `recordcount 0` is rejected for the zipfian workloads (A, B, C, E, F). Results from before this change are not directly comparable.
+- Known deviations from Java YCSB are tracked as future OpenSpec changes: read latest uses NBomber `Zipf(n, 0.99)` rather than YCSB's Gray `ZipfianGenerator`, no acknowledged-insert counter, xxHash instead of FNV, 1-based keys and `field1..N` names, the whole dataset built in memory, MongoDB/RavenDB/Scylla scan semantics.
 
 ## Workflow (OpenSpec + subagents)
 
