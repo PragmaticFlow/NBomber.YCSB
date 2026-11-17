@@ -8,8 +8,8 @@ namespace NBomber.YCSB.Tests
         private const int ZIPF_SEED = 6789;
         private const int DRAWS = 10_000;
 
-        private static DataGenerator CreateOrdered(ulong recordCount = 1000, Workload workload = Workload.A) =>
-            new(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = recordCount, Workload = workload });
+        private static DataGenerator CreateOrdered(ulong recordCount = 1000) =>
+            new(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = recordCount }, insertProportion: 0);
 
         private static ulong KeyNumber(string key) => ulong.Parse(key["user".Length..]);
 
@@ -41,7 +41,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void CreateValues_Has_Configured_Length_And_Lowercase_Alphabet()
         {
-            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 100 });
+            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 100 }, insertProportion: 0);
 
             AssertValues(dataGen.CreateValues(), 10, 100);
         }
@@ -49,7 +49,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void CreateValues_With_FieldLength_One_Returns_Single_Letter()
         {
-            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 1 });
+            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 1 }, insertProportion: 0);
 
             AssertValues(dataGen.CreateValues(), 10, 1);
         }
@@ -57,7 +57,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void CreateValuesToUpdate_WriteAllFields_Returns_All_Fields()
         {
-            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 20, WriteAllFields = true });
+            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 20, WriteAllFields = true }, insertProportion: 0);
 
             AssertValues(dataGen.CreateValuesToUpdate(), 10, 20);
         }
@@ -65,7 +65,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void CreateValuesToUpdate_Single_Field_Returns_One_Field()
         {
-            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 20, WriteAllFields = false });
+            var dataGen = new DataGenerator(new YcsbCliArgs { FieldCount = 10, FieldLength = 20, WriteAllFields = false }, insertProportion: 0);
 
             var values = dataGen.CreateValuesToUpdate();
 
@@ -79,7 +79,7 @@ namespace NBomber.YCSB.Tests
             var dataGen = new DataGenerator(new YcsbCliArgs
             {
                 FieldCount = 10, FieldLength = 5, ReadAllFields = false, WriteAllFields = false
-            });
+            }, insertProportion: 0);
             var expected = Enumerable.Range(1, 10).Select(i => $"field{i}").ToHashSet();
             var seenRead = new HashSet<string>();
             var seenWrite = new HashSet<string>();
@@ -107,7 +107,7 @@ namespace NBomber.YCSB.Tests
             var dataGen = new DataGenerator(new YcsbCliArgs
             {
                 FieldCount = 1, FieldLength = 5, ReadAllFields = false, WriteAllFields = false
-            });
+            }, insertProportion: 0);
 
             for (var i = 0; i < 100; i++)
             {
@@ -119,7 +119,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void GetFieldNames_Returns_Null_When_ReadAllFields()
         {
-            var dataGen = new DataGenerator(new YcsbCliArgs { ReadAllFields = true });
+            var dataGen = new DataGenerator(new YcsbCliArgs { ReadAllFields = true }, insertProportion: 0);
 
             Assert.Null(dataGen.GetFieldNames());
         }
@@ -130,7 +130,7 @@ namespace NBomber.YCSB.Tests
             var dataGen = new DataGenerator(new YcsbCliArgs
             {
                 FieldCount = 10, FieldLength = 100, ReadAllFields = false
-            });
+            }, insertProportion: 0);
             var expected = Enumerable.Range(1, 10).Select(i => $"field{i}").ToHashSet();
 
             Parallel.For(0, DRAWS, _ =>
@@ -146,7 +146,7 @@ namespace NBomber.YCSB.Tests
         public void GetKeyNext_Is_Unique_Under_Parallel_Use()
         {
             const int count = 10_000;
-            var dataGen = new DataGenerator(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = 1000 });
+            var dataGen = new DataGenerator(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = 1000 }, insertProportion: 0);
             var keys = new string[count];
 
             Parallel.For(0, count, i => keys[i] = dataGen.GetKeyNext().Key);
@@ -195,7 +195,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void GetKeyLatest_Never_Returns_Unacknowledged_Key()
         {
-            var dataGen = CreateOrdered(workload: Workload.D);
+            var dataGen = CreateOrdered();
             var random = new Random(LATEST_SEED);
             dataGen.GetKeyNext();
 
@@ -219,7 +219,7 @@ namespace NBomber.YCSB.Tests
         public void GetKeyLatest_Newest_Key_Is_Hottest_With_Zipfian_Shape()
         {
             const int draws = 50_000;
-            var counts = CountLatest(CreateOrdered(workload: Workload.D), LATEST_SEED, draws);
+            var counts = CountLatest(CreateOrdered(), LATEST_SEED, draws);
 
             Assert.InRange(counts.Keys.Min(), 1UL, 1000UL);
             Assert.InRange(counts.Keys.Max(), 1UL, 1000UL);
@@ -231,7 +231,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void GetKeyLatest_Newly_Acknowledged_Key_Becomes_Hottest()
         {
-            var dataGen = CreateOrdered(workload: Workload.D);
+            var dataGen = CreateOrdered();
             dataGen.AcknowledgeInsert(dataGen.GetKeyNext().KeyNum);
 
             var counts = CountLatest(dataGen, LATEST_SEED, 50_000);
@@ -243,10 +243,10 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void GetKeyLatest_Incremental_Growth_Equals_Full_Dataset()
         {
-            var grown = CreateOrdered(1000, Workload.D);
+            var grown = CreateOrdered(1000);
             for (var i = 0; i < 1000; i++)
                 grown.AcknowledgeInsert(grown.GetKeyNext().KeyNum);
-            var full = CreateOrdered(2000, Workload.D);
+            var full = CreateOrdered(2000);
 
             var randomGrown = new Random(LATEST_SEED);
             var randomFull = new Random(LATEST_SEED);
@@ -257,7 +257,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void GetKeyLatest_Single_Record_Always_Returns_Key_One()
         {
-            var dataGen = CreateOrdered(1, Workload.D);
+            var dataGen = CreateOrdered(1);
             Assert.Equal(new[] { 1UL }, CountLatest(dataGen, LATEST_SEED, 1000).Keys);
 
             dataGen.GetKeyNext();   // key 2 reserved, not acknowledged
@@ -268,7 +268,7 @@ namespace NBomber.YCSB.Tests
         public void GetKeyLatest_Two_Records_Return_Only_Keys_One_And_Two()
         {
             const int draws = 20_000;
-            var counts = CountLatest(CreateOrdered(2, Workload.D), LATEST_SEED, draws);
+            var counts = CountLatest(CreateOrdered(2), LATEST_SEED, draws);
 
             Assert.True(counts.Keys.ToHashSet().IsSubsetOf([1UL, 2UL]));
             Assert.InRange(counts[2] / (double)draws, 0.60, 0.73);
@@ -277,7 +277,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void Constructor_Rejects_RecordCount_Zero_For_Workload_D()
         {
-            var ex = Assert.Throws<ArgumentException>(() => CreateOrdered(0, Workload.D));
+            var ex = Assert.Throws<ArgumentException>(() => CreateOrdered(0));
             Assert.Contains("recordcount", ex.Message);
         }
 
