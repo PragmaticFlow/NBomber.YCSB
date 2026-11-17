@@ -26,7 +26,7 @@ public static class ZipfianExtensions
 
         while (true)
         {
-            var hash = FnvHash64(NextRank(random));
+            var hash = FnvHash64(NextRank(random, ZIPFIAN_ITEMS, ZETAN, ZIPFIAN_ETA));
 
             if (hash == long.MinValue)
                 continue;
@@ -38,10 +38,30 @@ public static class ZipfianExtensions
         }
     }
 
-    private static long NextRank(Random random)
+    // rank in [0, itemCount - 1]; the Gray formula can round to itemCount when u is within ~2^-53 of 1
+    public static long Zipfian(this Random random, long itemCount, double zetaN, double eta)
+        => Math.Min(NextRank(random, itemCount, zetaN, eta), itemCount - 1);
+
+    public static double ZipfianEta(long itemCount, double zetaN)
+        => (1 - Math.Pow(2.0 / itemCount, 1 - ZIPFIAN_CONSTANT)) / (1 - ZIPFIAN_ZETA_2_THETA / zetaN);
+
+    /// <summary>
+    /// Returns <paramref name="zetaFrom"/> + sum of 1 / k^theta for k = <paramref name="fromCount"/> + 1 .. <paramref name="toCount"/> (Java zeta(st, n, theta, initialsum)).
+    /// </summary>
+    public static double ZipfianZeta(long fromCount, long toCount, double zetaFrom)
+    {
+        var sum = zetaFrom;
+
+        for (var k = fromCount + 1; k <= toCount; k++)
+            sum += 1 / Math.Pow(k, ZIPFIAN_CONSTANT);
+
+        return sum;
+    }
+
+    private static long NextRank(Random random, long itemCount, double zetaN, double eta)
     {
         var u = random.NextDouble();
-        var uz = u * ZETAN;
+        var uz = u * zetaN;
 
         if (uz < 1.0)
             return 0;
@@ -49,7 +69,7 @@ public static class ZipfianExtensions
         if (uz < ZIPFIAN_RANK_1_LIMIT)
             return 1;
 
-        return (long)(ZIPFIAN_ITEMS * Math.Pow(ZIPFIAN_ETA * u - ZIPFIAN_ETA + 1, ZIPFIAN_ALPHA));
+        return (long)(itemCount * Math.Pow(eta * u - eta + 1, ZIPFIAN_ALPHA));
     }
 
     private static long FnvHash64(long value)

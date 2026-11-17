@@ -6,7 +6,12 @@ namespace NBomber.YCSB.Tests
     {
         private const int LATEST_SEED = 12345;
         private const int ZIPF_SEED = 6789;
-        private const int Draws = 10_000;
+        private const int DRAWS = 10_000;
+
+        private static DataGenerator CreateOrdered(ulong recordCount = 1000, Workload workload = Workload.A) =>
+            new(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = recordCount, Workload = workload });
+
+        private static ulong KeyNumber(string key) => ulong.Parse(key["user".Length..]);
 
         private static void AssertValues(Dictionary<string, string> values, int fieldCount, int fieldLength)
         {
@@ -18,6 +23,19 @@ namespace NBomber.YCSB.Tests
                 Assert.Equal(fieldLength, value.Length);
                 Assert.All(value, c => Assert.InRange(c, 'a', 'z'));
             }
+        }
+
+        private static Dictionary<ulong, int> CountLatest(DataGenerator dataGen, int seed, int draws)
+        {
+            var random = new Random(seed);
+            var counts = new Dictionary<ulong, int>();
+            for (var i = 0; i < draws; i++)
+            {
+                var key = KeyNumber(dataGen.GetKeyLatest(random));
+                counts[key] = counts.GetValueOrDefault(key) + 1;
+            }
+
+            return counts;
         }
 
         [Fact]
@@ -66,7 +84,7 @@ namespace NBomber.YCSB.Tests
             var seenRead = new HashSet<string>();
             var seenWrite = new HashSet<string>();
 
-            for (var i = 0; i < Draws; i++)
+            for (var i = 0; i < DRAWS; i++)
             {
                 var read = Assert.Single(dataGen.GetFieldNames()!);
                 var write = Assert.Single(dataGen.CreateValuesToUpdate()).Key;
@@ -115,7 +133,7 @@ namespace NBomber.YCSB.Tests
             });
             var expected = Enumerable.Range(1, 10).Select(i => $"field{i}").ToHashSet();
 
-            Parallel.For(0, Draws, _ =>
+            Parallel.For(0, DRAWS, _ =>
             {
                 AssertValues(dataGen.CreateValues(), 10, 100);
 
@@ -137,11 +155,6 @@ namespace NBomber.YCSB.Tests
             Assert.Equal(count, keys.Distinct().Count());
             Assert.True(expected.SetEquals(keys));
         }
-
-        private static DataGenerator CreateOrdered(ulong recordCount = 1000) =>
-            new(new YcsbCliArgs { InsertOrder = "ordered", RecordCount = recordCount });
-
-        private static ulong KeyNumber(string key) => ulong.Parse(key["user".Length..]);
 
         [Fact]
         public void LastAcknowledgedKey_Starts_At_RecordCount()
@@ -182,12 +195,12 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void GetKeyLatest_Never_Returns_Unacknowledged_Key()
         {
-            var dataGen = CreateOrdered();
+            var dataGen = CreateOrdered(workload: Workload.D);
             var random = new Random(LATEST_SEED);
             dataGen.GetKeyNext();
 
             var seen = new HashSet<ulong>();
-            for (var i = 0; i < Draws; i++)
+            for (var i = 0; i < DRAWS; i++)
                 seen.Add(KeyNumber(dataGen.GetKeyLatest(random)));
 
             Assert.Contains(1000UL, seen);
@@ -195,11 +208,77 @@ namespace NBomber.YCSB.Tests
 
             dataGen.AcknowledgeInsert(1001);
             seen.Clear();
-            for (var i = 0; i < Draws; i++)
+            for (var i = 0; i < DRAWS; i++)
                 seen.Add(KeyNumber(dataGen.GetKeyLatest(random)));
 
             Assert.Contains(1001UL, seen);
             Assert.True(seen.Max() <= 1001UL);
+        }
+
+        [Fact]
+        public void GetKeyLatest_Newest_Key_Is_Hottest_With_Zipfian_Shape()
+        {
+            const int draws = 50_000;
+            var counts = CountLatest(CreateOrdered(workload: Workload.D), LATEST_SEED, draws);
+
+            Assert.InRange(counts.Keys.Min(), 1UL, 1000UL);
+            Assert.InRange(counts.Keys.Max(), 1UL, 1000UL);
+            Assert.Equal(1000UL, counts.MaxBy(kv => kv.Value).Key);
+            Assert.InRange(counts[1000] / (double)draws, 0.11, 0.15);
+            Assert.InRange(counts[999] / (double)draws, 0.055, 0.075);
+        }
+
+        [Fact]
+        public void GetKeyLatest_Newly_Acknowledged_Key_Becomes_Hottest()
+        {
+            var dataGen = CreateOrdered(workload: Workload.D);
+            dataGen.AcknowledgeInsert(dataGen.GetKeyNext().KeyNum);
+
+            var counts = CountLatest(dataGen, LATEST_SEED, 50_000);
+
+            Assert.Equal(1001UL, counts.MaxBy(kv => kv.Value).Key);
+            Assert.True(counts.Keys.Max() <= 1001UL);
+        }
+
+        [Fact]
+        public void GetKeyLatest_Incremental_Growth_Equals_Full_Dataset()
+        {
+            var grown = CreateOrdered(1000, Workload.D);
+            for (var i = 0; i < 1000; i++)
+                grown.AcknowledgeInsert(grown.GetKeyNext().KeyNum);
+            var full = CreateOrdered(2000, Workload.D);
+
+            var randomGrown = new Random(LATEST_SEED);
+            var randomFull = new Random(LATEST_SEED);
+            for (var i = 0; i < 1000; i++)
+                Assert.Equal(full.GetKeyLatest(randomFull), grown.GetKeyLatest(randomGrown));
+        }
+
+        [Fact]
+        public void GetKeyLatest_Single_Record_Always_Returns_Key_One()
+        {
+            var dataGen = CreateOrdered(1, Workload.D);
+            Assert.Equal(new[] { 1UL }, CountLatest(dataGen, LATEST_SEED, 1000).Keys);
+
+            dataGen.GetKeyNext();   // key 2 reserved, not acknowledged
+            Assert.Equal(new[] { 1UL }, CountLatest(dataGen, LATEST_SEED, 1000).Keys);
+        }
+
+        [Fact]
+        public void GetKeyLatest_Two_Records_Return_Only_Keys_One_And_Two()
+        {
+            const int draws = 20_000;
+            var counts = CountLatest(CreateOrdered(2, Workload.D), LATEST_SEED, draws);
+
+            Assert.True(counts.Keys.ToHashSet().IsSubsetOf([1UL, 2UL]));
+            Assert.InRange(counts[2] / (double)draws, 0.60, 0.73);
+        }
+
+        [Fact]
+        public void Constructor_Rejects_RecordCount_Zero_For_Workload_D()
+        {
+            var ex = Assert.Throws<ArgumentException>(() => CreateOrdered(0, Workload.D));
+            Assert.Contains("recordcount", ex.Message);
         }
 
         [Fact]
@@ -210,13 +289,13 @@ namespace NBomber.YCSB.Tests
             dataGen.GetKeyNext();
 
             var seen = new HashSet<ulong>();
-            for (var i = 0; i < Draws; i++)
+            for (var i = 0; i < DRAWS; i++)
                 seen.Add(KeyNumber(dataGen.GetKeyZipf(random)));
 
             Assert.True(seen.SetEquals([1UL, 2UL]));
 
             dataGen.AcknowledgeInsert(3);
-            for (var i = 0; i < Draws; i++)
+            for (var i = 0; i < DRAWS; i++)
                 seen.Add(KeyNumber(dataGen.GetKeyZipf(random)));
 
             Assert.Contains(3UL, seen);

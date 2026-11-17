@@ -1,5 +1,4 @@
-﻿using NBomber.CSharp;
-using Standart.Hash.xxHash;
+﻿using Standart.Hash.xxHash;
 
 namespace NBomber.YCSB.Infra;
 
@@ -25,6 +24,10 @@ public class DataGenerator(YcsbCliArgs settings)
 
     private readonly long _zipfianItemCount = GetZipfianItemCount(settings);
 
+    private LatestZipfian? _latest = CreateLatestZipfian(settings);   // only for workloads with read latest
+
+    private sealed record LatestZipfian(long ItemCount, double ZetaN, double Eta);
+
     public int NextScanLength(Random random) => (int)random.NextInt64(_minScanLength, (long)_maxScanLength + 1);
     public ulong LastAcknowledgedKey => Interlocked.Read(ref _lastAcknowledgedKey);
     public long ZipfianItemCount => _zipfianItemCount;
@@ -46,6 +49,13 @@ public class DataGenerator(YcsbCliArgs settings)
                 limit++;
 
             Interlocked.Exchange(ref _lastAcknowledgedKey, limit);
+
+            // _latest is written only here, under _ackLock, so snapshots only grow
+            if (_latest != null && (long)limit > _latest.ItemCount)
+            {
+                var zetaN = ZipfianExtensions.ZipfianZeta(_latest.ItemCount, (long)limit, _latest.ZetaN);
+                Volatile.Write(ref _latest, new LatestZipfian((long)limit, zetaN, ZipfianExtensions.ZipfianEta((long)limit, zetaN)));
+            }
         }
     }
 
@@ -56,22 +66,13 @@ public class DataGenerator(YcsbCliArgs settings)
         return BuildKeyName(keyNum, _zeroPadding);
     }
 
-    public string GetKeyLatest(Random random, double theta = 0.99)
+    public string GetKeyLatest(Random random)
     {
-        var max = LastAcknowledgedKey;
+        var latest = Volatile.Read(ref _latest)
+                     ?? throw new InvalidOperationException($"Workload {settings.Workload} has no read latest operation.");
 
-        if (max <= 1UL)
-            return BuildKeyName(1UL, _zeroPadding);
-
-        var min = Math.Min(max, int.MaxValue);
-
-        var rundom = random.Zipf((int)min, theta);
-
-        var offset = (ulong)(rundom - 1);
-
-        ulong keyNum = (max > offset) ? (max - offset) : 1UL;
-
-        return BuildKeyName(keyNum, _zeroPadding);
+        var keyNum = latest.ItemCount - random.Zipfian(latest.ItemCount, latest.ZetaN, latest.Eta);
+        return BuildKeyName((ulong)keyNum, _zeroPadding);
     }
 
     public Dictionary<string, Dictionary<string, string>> GenerateRandoms()
@@ -138,18 +139,17 @@ public class DataGenerator(YcsbCliArgs settings)
     {
         var operations = WorkloadManager.GetOperations(settings.Workload);
         var usesZipfian = operations.Any(o => o.Item1 is OperationType.Read or OperationType.Update
-                                                      or OperationType.Scan or OperationType.ReadModifyWrite);
+                                                      or OperationType.Scan or OperationType.ReadModifyWrite
+                                                      or OperationType.ReadLatest);
         if (usesZipfian && settings.RecordCount == 0)
             throw new ArgumentException(
-                $"recordcount must be at least 1 for workload {settings.Workload}: read, update, scan and read-modify-write choose keys from loaded records.",
+                $"recordcount must be at least 1 for workload {settings.Workload}: read, update, scan, read-modify-write and read latest choose keys from loaded records.",
                 nameof(settings));
 
         var insertProportion = (double)operations.Where(o => o.Item1 == OperationType.Insert).Sum(o => o.Item2)
                                / operations.Sum(o => o.Item2);
         var expectedNewKeys = Math.Max(0, (long)(settings.OperationCount * insertProportion * 2.0));
 
-        // + 1: YCSB builds ScrambledZipfianGenerator(insertstart, insertstart + insertcount + expectednewkeys),
-        // an inclusive range (CoreWorkload.java L519, ScrambledZipfianGenerator.java L87).
         try
         {
             return checked((long)settings.RecordCount + expectedNewKeys + 1);
@@ -158,6 +158,16 @@ public class DataGenerator(YcsbCliArgs settings)
         {
             throw new ArgumentException($"recordcount ({settings.RecordCount}) is too large for zipfian key choice.", nameof(settings));
         }
+    }
+
+    private static LatestZipfian? CreateLatestZipfian(YcsbCliArgs settings)
+    {
+        if (!WorkloadManager.GetOperations(settings.Workload).Any(o => o.Item1 == OperationType.ReadLatest))
+            return null;
+
+        var itemCount = (long)settings.RecordCount;
+        var zetaN = ZipfianExtensions.ZipfianZeta(0, itemCount, 0);
+        return new LatestZipfian(itemCount, zetaN, ZipfianExtensions.ZipfianEta(itemCount, zetaN));
     }
 
     private string BuildKeyName(ulong keyNum, int zeroPadding)

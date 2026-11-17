@@ -5,7 +5,7 @@ namespace NBomber.YCSB.Tests
 {
     public class ScanLengthTests
     {
-        private const int Draws = 100_000;
+        private const int DRAWS = 100_000;
 
         private static YcsbCliArgs ParseRun(params string[] args)
         {
@@ -132,7 +132,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void NextScanLength_Workload_E_Defaults_Cover_Full_Range_Uniformly()
         {
-            var values = Draw(new YcsbCliArgs { Workload = Workload.E }, Draws, seed: 12345);
+            var values = Draw(new YcsbCliArgs { Workload = Workload.E }, DRAWS, seed: 12345);
 
             Assert.All(values, v => Assert.InRange(v, 1, 100));
             Assert.Contains(1, values);
@@ -151,7 +151,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void NextScanLength_Explicit_Max_Is_Respected()
         {
-            var values = Draw(new YcsbCliArgs { Workload = Workload.E, MaxScanLength = 500 }, Draws, seed: 2);
+            var values = Draw(new YcsbCliArgs { Workload = Workload.E, MaxScanLength = 500 }, DRAWS, seed: 2);
 
             Assert.All(values, v => Assert.InRange(v, 1, 500));
             Assert.Contains(values, v => v > 100);
@@ -160,7 +160,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public void NextScanLength_Min_Override_Uses_Workload_Default_Max()
         {
-            var values = Draw(new YcsbCliArgs { Workload = Workload.E, MinScanLength = 20 }, Draws, seed: 3);
+            var values = Draw(new YcsbCliArgs { Workload = Workload.E, MinScanLength = 20 }, DRAWS, seed: 3);
 
             Assert.All(values, v => Assert.InRange(v, 20, 100));
         }
