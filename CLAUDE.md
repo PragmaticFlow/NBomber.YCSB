@@ -13,7 +13,7 @@ dotnet build NBomber.YCSB.sln          # NuGet audit warnings NU1900-NU1904 are 
 dotnet run --project src/NBomber.YCSB -- run --workload A --db redis -p redis.host=localhost -p redis.port=6379
 
 # Offline tests (no database needed)
-dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~DataGeneratorTests|FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests"
+dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~DataGeneratorTests|FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests|FullyQualifiedName~ZipfianExtensionsTests"
 
 # Single test
 dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName=NBomber.YCSB.Tests.ScanLengthTests.Validator_Accepts_Defaults"
@@ -50,6 +50,7 @@ Flow: `Program.cs` parses the `run` command into `YcsbCliArgs`, validates it wit
 - `MessagePack` in `NBomber.YCSB.csproj` is not used by our code. It pins NBomber's transitive dependency to a patched version; do not remove it, or the build fails the NuGet audit.
 - `PostgresNoSQLYcsbClient` keeps its `NpgsqlDataSource` in a static field that each new instance replaces.
 - Offline helper tests (`*HelperTests`, `ScanLengthTests`) are not run by CI, which only filters the per-database live test classes.
+- `--exportfile dir/name` writes `dir/name.{csv,html,md,txt}` without a timestamp folder (repeated runs overwrite); a bare name goes to `reports/<timestamp>/`.
 - Results produced before `--warmup` existed used a fixed 3-second warm-up and may not be directly comparable with default (no warm-up) runs; `--warmup 3` reproduces the old behaviour.
 - Read, update, scan and read-modify-write choose keys with YCSB's scrambled zipfian (0.99) in `DataGenerator.GetKeyZipf`. `recordcount 0` is rejected for all workloads (A-F). Results from before this change are not directly comparable. Read latest (workload D) uses YCSB's Gray zipfian draw with incremental zeta (`DataGenerator.GetKeyLatest`); workload D results from before this change are not directly comparable.
 - Known deviations from Java YCSB are tracked as future OpenSpec changes: no acknowledged-insert counter, xxHash instead of FNV, 1-based keys and `field1..N` names, the whole dataset built in memory, MongoDB/RavenDB/Scylla scan semantics.

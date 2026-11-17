@@ -23,7 +23,7 @@ namespace NBomber.YCSB.Tests
 
         private static int[] Draw(YcsbCliArgs settings, int count, int seed)
         {
-            var dataGen = new DataGenerator(settings);
+            var dataGen = new DataGenerator(settings, insertProportion: 0);
             var random = new Random(seed);
             var values = new int[count];
 

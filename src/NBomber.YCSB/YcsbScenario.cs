@@ -13,7 +13,9 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
         var tableName = "test_table";
 
-        var dataGen = new DataGenerator(settings);
+        var insertProportion = (double)operations.Where(o => o.Item1 == OperationType.Insert).Sum(o => o.Item2)
+                               / operations.Sum(o => o.Item2);
+        var dataGen = new DataGenerator(settings, insertProportion);
 
         var scenario = Scenario.Create(workloadDescription, async context =>
         {
@@ -109,9 +111,13 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                .WithTestSuite($"Test {settings.Db} - {workloadDescription}")
                .WithReportingInterval(TimeSpan.FromSeconds(5));
 
-        if (settings.ExportFile != null)
+        if (!string.IsNullOrWhiteSpace(settings.ExportFile))
         {
-            runner = runner.WithReportFileName(settings.ExportFile);
+            var folder = Path.GetDirectoryName(settings.ExportFile);
+            if (!string.IsNullOrEmpty(folder))
+                runner = runner.WithReportFolder(folder);
+
+            runner = runner.WithReportFileName(Path.GetFileName(settings.ExportFile));
         }
 
         return runner.Run();

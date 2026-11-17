@@ -21,21 +21,18 @@ public class YcsbCliArgsValidator : AbstractValidator<YcsbCliArgs>
         When(x => !string.IsNullOrWhiteSpace(x.ExportFile), () =>
         {
             RuleFor(x => x.ExportFile)
-                .Must(DirectoryExists)
-                .WithMessage("The directory for ExportFile does not exist.");
+                .Must(IsValidExportFile)
+                .WithMessage(x => $"exportfile ({x.ExportFile}) must be a valid path ending with a file name.");
         });
     }
 
-    private bool DirectoryExists(string? exportFilePath)
+    private static bool IsValidExportFile(string? exportFile)
     {
-        try
-        {
-            var dir = Path.GetDirectoryName(exportFilePath);
-            return Directory.Exists(dir);
-        }
-        catch
-        {
+        var fileName = Path.GetFileName(exportFile);
+        if (string.IsNullOrWhiteSpace(fileName) || fileName.AsSpan().IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             return false;
-        }
+
+        var folder = Path.GetDirectoryName(exportFile);
+        return string.IsNullOrEmpty(folder) || folder.AsSpan().IndexOfAny(Path.GetInvalidPathChars()) < 0;
     }
 }
