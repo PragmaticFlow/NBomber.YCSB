@@ -5,6 +5,11 @@ namespace NBomber.YCSB.Tests
 {
     public class ScyllaDbTests
     {
+        private const int FIELD_COUNT = 10;
+
+        private static readonly Lazy<Cassandra.ISession> RAW_SESSION = new(
+            () => Cassandra.Cluster.Builder().AddContactPoint("localhost").WithPort(9042).Build().Connect());
+
         [Fact]
         public void Workload_A_Shold_Execute_50_Read_50_Update()
         {
@@ -134,8 +139,6 @@ namespace NBomber.YCSB.Tests
         // These need a running ScyllaDB where ycsb.ycsb_table already exists with the default 10
         // field columns (e.g. after a workload run / InitDb). They use unique keys and never call
         // InitDb or DeleteAllData. Stored values are verified through a separate raw CQL session.
-
-        private const int FieldCount = 10;
 
         [Fact]
         public async Task Insert_Stores_Each_Value_In_Its_Own_Column()
@@ -283,40 +286,37 @@ namespace NBomber.YCSB.Tests
             => new(YcsbCliArgs.ParseProps([
                 "scylladb.host=localhost",
                 "scylladb.port=9042",
-                $"fieldcount={FieldCount}"
+                $"fieldcount={FIELD_COUNT}"
             ]));
 
         private static string NewKey() => $"scylla-test-{Guid.NewGuid():N}";
 
         // field{i} gets a value with a distinct character and length, so a shifted column is detectable.
         private static Dictionary<string, string> DistinctValues(int shift = 0)
-            => Enumerable.Range(1, FieldCount).ToDictionary(
+            => Enumerable.Range(1, FIELD_COUNT).ToDictionary(
                 i => $"field{i}",
                 i => new string((char)('a' + (i + shift) % 26), 5 + i));
 
-        private static readonly Lazy<Cassandra.ISession> RawSession = new(
-            () => Cassandra.Cluster.Builder().AddContactPoint("localhost").WithPort(9042).Build().Connect());
-
         private static Task<Dictionary<string, string>> ReadRawRow(string key)
         {
-            var cols = string.Join(", ", Enumerable.Range(1, FieldCount).Select(i => $"field{i}"));
-            var rs = RawSession.Value.Execute(new Cassandra.SimpleStatement(
+            var cols = string.Join(", ", Enumerable.Range(1, FIELD_COUNT).Select(i => $"field{i}"));
+            var rs = RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement(
                 $"SELECT {cols} FROM ycsb.ycsb_table WHERE ycsb_key = ?", key));
             var row = rs.First();
 
-            return Task.FromResult(Enumerable.Range(1, FieldCount)
+            return Task.FromResult(Enumerable.Range(1, FIELD_COUNT)
                 .ToDictionary(i => $"field{i}", i => row.GetValue<string>(i - 1)));
         }
 
         private static Task<(string Key, Dictionary<string, string> Fields)> ReadRawFirstRowFromToken(string startKey)
         {
-            var cols = string.Join(", ", Enumerable.Range(1, FieldCount).Select(i => $"field{i}"));
-            var rs = RawSession.Value.Execute(new Cassandra.SimpleStatement(
+            var cols = string.Join(", ", Enumerable.Range(1, FIELD_COUNT).Select(i => $"field{i}"));
+            var rs = RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement(
                 $"SELECT ycsb_key, {cols} FROM ycsb.ycsb_table WHERE TOKEN(ycsb_key) >= TOKEN(?) LIMIT 1", startKey));
             var row = rs.First();
 
             var fields = new Dictionary<string, string>();
-            for (var i = 1; i <= FieldCount; i++)
+            for (var i = 1; i <= FIELD_COUNT; i++)
             {
                 var v = row.GetValue<string>(i);
                 if (v != null) fields[$"field{i}"] = v;
