@@ -3,7 +3,14 @@ using NBomber.YCSB.ScyllaDb;
 
 namespace NBomber.YCSB.Tests
 {
-    public class ScyllaDbTests
+    public class ScyllaDbSchemaFixture : IAsyncLifetime
+    {
+        public async Task InitializeAsync() => await ScyllaDbTests.CreateClient().InitDb();
+
+        public Task DisposeAsync() => Task.CompletedTask;
+    }
+
+    public class ScyllaDbTests : IClassFixture<ScyllaDbSchemaFixture>
     {
         private const int FIELD_COUNT = 10;
 
@@ -137,11 +144,7 @@ namespace NBomber.YCSB.Tests
         }
 
         // ---- Field mapping tests ----
-        // These need a running ScyllaDB where ycsb.ycsb_table already exists with the default 10
-        // field columns (e.g. after a workload run). They use unique keys and do not call InitDb,
-        // except tests that reset the table through DeleteAllData: those call InitDb afterwards,
-        // always with FIELD_COUNT (10) fields, so the table keeps the default columns. Stored
-        // values are verified through a separate raw CQL session.
+        // Stored values are verified through a separate raw CQL session.
 
         [Fact]
         public async Task Insert_Stores_Each_Value_In_Its_Own_Column()
@@ -366,7 +369,7 @@ namespace NBomber.YCSB.Tests
             }
         }
 
-        private static ScyllaYcsbClient CreateClient()
+        internal static ScyllaYcsbClient CreateClient()
             => new(YcsbCliArgs.ParseProps([
                 "scylladb.hosts=localhost",
                 "scylladb.port=9042",
