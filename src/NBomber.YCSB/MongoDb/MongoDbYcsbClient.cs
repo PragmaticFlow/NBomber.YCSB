@@ -21,7 +21,8 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
         var mongoClientSett = new MongoClientSettings()
         {
-            Server = new MongoServerAddress(host, int.Parse(port))
+            Server = new MongoServerAddress(host, int.Parse(port)),
+            WriteConcern = WriteConcern.W1
         };
 
         _client = new MongoClient(mongoClientSett);
@@ -32,7 +33,7 @@ public class MongoDbYcsbClient : IDbYcsbClient
     {
         var col = _db.GetCollection<BsonDocument>(table);
 
-        var doc = MongoDbHelper.BuildDocument(key, values, DateTime.UtcNow);
+        var doc = MongoDbHelper.BuildDocument(key, values);
 
         await col.InsertOneAsync(doc);
 
@@ -47,16 +48,7 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
         var filter = MongoDbHelper.BuildFilter(key);
 
-        var updates = values
-            .Select(kv =>
-                Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
-            ).ToList();
-
-        updates.Add(Builders<BsonDocument>.Update.Set("updatedAt", DateTime.UtcNow));
-
-        var update = Builders<BsonDocument>.Update.Combine(updates);
-
-        var result = await col.UpdateOneAsync(filter, update);
+        var result = await col.UpdateOneAsync(filter, MongoDbHelper.BuildUpdate(values));
 
         if (result.MatchedCount == 0)
             return Response.Fail(statusCode: "no data");
@@ -70,69 +62,33 @@ public class MongoDbYcsbClient : IDbYcsbClient
     {
         var col = _db.GetCollection<BsonDocument>(table);
 
-        var filter = MongoDbHelper.BuildFilter(key);
+        var doc = await FindOne(col, key, fields);
 
-        if (fields == null || fields.Count == 0)
-        {
-            var result = await col.Find(filter).FirstOrDefaultAsync();
+        if (doc == null)
+            return Response.Fail(statusCode: "no data");
 
-            var size = MongoDbHelper.GetSize(result);
-
-            return Response.Ok(sizeBytes: size);
-        }
-        else
-        {
-            var projection = fields.Aggregate(
-                                Builders<BsonDocument>.Projection.Include("_id"),
-                                (p, f) => p.Include(f)
-                            );
-
-            var result = await col
-                .Find(filter)
-                .Project<BsonDocument>(projection)
-                .FirstOrDefaultAsync();
-
-            var size = MongoDbHelper.GetSize(result);
-
-            return Response.Ok(sizeBytes: size);
-        }
+        return Response.Ok(sizeBytes: MongoDbHelper.GetSize(doc));
     }
 
     public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string> fields)
     {
         var col = _db.GetCollection<BsonDocument>(table);
 
-        var filter = MongoDbHelper.BuildFilter(startKey);
+        var find = col.Find<BsonDocument>(MongoDbHelper.BuildScanFilter(startKey));
 
-        if (fields == null || fields.Count == 0)
-        {
-            var result = await col
-                  .Find(filter)
-                  .Sort(Builders<BsonDocument>.Sort.Ascending("_id"))
-                  .Limit(count)
-                  .ToListAsync();
+        var projection = MongoDbHelper.BuildProjection(fields);
+        if (projection != null)
+            find = find.Project<BsonDocument>(projection);
 
-            var sizeBytes = result.Sum(MongoDbHelper.GetSize);
+        var result = await find
+            .Sort(Builders<BsonDocument>.Sort.Ascending("_id"))
+            .Limit(count)
+            .ToListAsync();
 
-            return Response.Ok(sizeBytes: sizeBytes);
-        }
-        else
-        {
-            var projection = fields.Aggregate(
-                Builders<BsonDocument>.Projection.Include("_id"), (p, f) => p.Include(f)
-            );
+        if (result.Count == 0)
+            return Response.Fail(statusCode: "no data");
 
-            var result = await col
-                   .Find(filter)
-                   .Project<BsonDocument>(projection)
-                   .Sort(Builders<BsonDocument>.Sort.Ascending("_id"))
-                   .Limit(count)
-                   .ToListAsync();
-
-            var sizeBytes = result.Sum(MongoDbHelper.GetSize);
-
-            return Response.Ok(sizeBytes: sizeBytes);
-        }
+        return Response.Ok(sizeBytes: result.Sum(MongoDbHelper.GetSize));
     }
 
     public async Task<Response<object>> ReadModifyWrite(string table, string key, HashSet<string>? fields, Dictionary<string, string> values)
@@ -140,38 +96,14 @@ public class MongoDbYcsbClient : IDbYcsbClient
         var col = _db.GetCollection<BsonDocument>(table);
         var filter = MongoDbHelper.BuildFilter(key);
 
-        // Read phase
-        BsonDocument existing;
-
-        if (fields == null || fields.Count == 0)
-        {
-            existing = await col.Find(filter).FirstOrDefaultAsync();
-        }
-        else
-        {
-            var projection = fields.Aggregate(
-                Builders<BsonDocument>.Projection.Include("_id"),
-                (p, f) => p.Include(f)
-            );
-
-            existing = await col.Find(filter).Project<BsonDocument>(projection).FirstOrDefaultAsync();
-        }
+        var existing = await FindOne(col, key, fields);
 
         if (existing == null)
             return Response.Fail(statusCode: "no data");
 
         var size = MongoDbHelper.GetSize(existing);
 
-        // Update phase
-        var updates = values
-            .Select(kv =>
-                Builders<BsonDocument>.Update.Set($"fields.{kv.Key}", kv.Value ?? string.Empty)
-            ).ToList();
-
-        updates.Add(Builders<BsonDocument>.Update.Set("updatedAt", DateTime.UtcNow));
-
-        var update = Builders<BsonDocument>.Update.Combine(updates);
-        await col.UpdateOneAsync(filter, update);
+        await col.UpdateOneAsync(filter, MongoDbHelper.BuildUpdate(values));
 
         size += MongoDbHelper.GetSize(MongoDbHelper.BuildFieldsDocument(values));
 
@@ -180,23 +112,15 @@ public class MongoDbYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> DeleteAllData()
     {
-        var databases = _client.ListDatabaseNames().ToList();
-        foreach (var dbName in databases)
-        {
-            if (dbName == "admin" || dbName == "local" || dbName == "config")
-                continue;
-
-            await _client.DropDatabaseAsync(dbName);
-        }
+        await _client.DropDatabaseAsync(databaseName);
         return Response.Ok();
     }
 
     public async Task<Response<object>> BulkInsert(string table, Dictionary<string, Dictionary<string, string>> data)
     {
         var col = _db.GetCollection<BsonDocument>(table);
-        var now = DateTime.UtcNow;
 
-        var docs = data.Select(kvp => MongoDbHelper.BuildDocument(kvp.Key, kvp.Value, now))
+        var docs = data.Select(kvp => MongoDbHelper.BuildDocument(kvp.Key, kvp.Value))
                        .ToList();
 
         // MongoDB continues inserting the rest of the documents even if one fails
@@ -210,5 +134,16 @@ public class MongoDbYcsbClient : IDbYcsbClient
     public async Task<Response<object>> InitDb()
     {
         return Response.Ok();
+    }
+
+    private static async Task<BsonDocument?> FindOne(IMongoCollection<BsonDocument> col, string key, HashSet<string>? fields)
+    {
+        var find = col.Find(MongoDbHelper.BuildFilter(key));
+
+        var projection = MongoDbHelper.BuildProjection(fields);
+        if (projection != null)
+            find = find.Project<BsonDocument>(projection);
+
+        return await find.FirstOrDefaultAsync();
     }
 }

@@ -90,8 +90,8 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
         })
         .WithInit(async context =>
         {
-            await ycsbClient.InitDb();
             await ycsbClient.DeleteAllData();
+            await ycsbClient.InitDb();
 
             var list = dataGen.GenerateRandoms();
 

@@ -78,8 +78,8 @@ public interface IDbYcsbClient
     Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string>? fields);
 
     /// <summary>
-    /// Deletes all data from the underlying database or storage system.
-    /// Intended for test setup or teardown operations.
+    /// Runs first during scenario init; removes the benchmark data (may drop benchmark structures);
+    /// must succeed on a database never used by the benchmark.
     /// </summary>
     /// <returns>
     /// A <see cref="Response{object}"/> indicating the result of the delete-all operation.
@@ -99,8 +99,7 @@ public interface IDbYcsbClient
     Task<Response<object>> BulkInsert(string table, Dictionary<string, Dictionary<string, string>> data);
 
     /// <summary>
-    /// Initializes the database or storage layer before running workloads.
-    /// Typically used for creating tables, indexes, or establishing connections.
+    /// Runs after DeleteAllData; creates what the run needs.
     /// </summary>
     /// <returns>
     /// A <see cref="Response{T}"/> describing the initialization result.

@@ -52,7 +52,9 @@ public class ScyllaYcsbClient : IDbYcsbClient
 
             var builder = Cluster.Builder()
                 .AddContactPoints(hosts)
-                .WithPort(port);
+                .WithPort(port)
+                // Java YCSB scylla binding default: QUORUM for reads and writes
+                .WithQueryOptions(new QueryOptions().SetConsistencyLevel(ConsistencyLevel.Quorum));
 
             if (!string.IsNullOrEmpty(user))
                 builder = builder.WithCredentials(user, password);
@@ -68,27 +70,20 @@ public class ScyllaYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> InitDb()
     {
-        // Note: IF NOT EXISTS does not alter the replication of an already existing keyspace.
+        // IF NOT EXISTS does not alter the replication of an already existing keyspace.
         await _session.ExecuteAsync(new SimpleStatement(
             ScyllaDbHelper.BuildCreateKeyspaceCql(_keyspace, _replicationFactor)
         ));
 
-        // Drop and recreate so the column set always matches the current fieldcount.
-        // IF NOT EXISTS would silently keep a stale schema from a previous run.
+        var columnDefs = string.Join(", ", _fieldNames.Select(f => $"{f} text"));
         await _session.ExecuteAsync(new SimpleStatement(
-            $"DROP TABLE IF EXISTS {_keyspace}.{TABLE_NAME}"
+            $"CREATE TABLE IF NOT EXISTS {_keyspace}.{TABLE_NAME} " +
+            $"({PRIMARY_KEY} text PRIMARY KEY, {columnDefs})"
         ));
 
-        // The table was dropped, so previously prepared statements are stale.
         _updatePsCache.Clear();
         _projectedReadPsCache.Clear();
         _projectedScanPsCache.Clear();
-
-        var columnDefs = string.Join(", ", _fieldNames.Select(f => $"{f} text"));
-        await _session.ExecuteAsync(new SimpleStatement(
-            $"CREATE TABLE {_keyspace}.{TABLE_NAME} " +
-            $"({PRIMARY_KEY} text PRIMARY KEY, {columnDefs})"
-        ));
 
         await PrepareInsert();
         await PrepareRead();
@@ -115,8 +110,6 @@ public class ScyllaYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> Update(string table, string key, Dictionary<string, string> values)
     {
-        // YCSB sends only the subset of fields to modify. The statement sets just those columns,
-        // so other columns remain untouched — no prior read needed.
         await ExecuteUpdate(key, values);
 
         return Response.Ok(sizeBytes: ScyllaDbHelper.GetSize(key, values));
@@ -150,7 +143,6 @@ public class ScyllaYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> ReadModifyWrite(string table, string key, HashSet<string>? fields, Dictionary<string, string> values)
     {
-        // YCSB workload F: read the record, then write it back. Size covers both phases.
         long size;
 
         if (fields == null || fields.Count == 0)
@@ -182,8 +174,6 @@ public class ScyllaYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string>? fields)
     {
-        // Materialize the requested fields once. Used both to build the query and
-        // to extract columns below, so it must stay consistent.
         var fieldList = fields != null && fields.Count > 0 ? fields.ToList() : null;
         RowSet rowSet;
 
@@ -235,8 +225,8 @@ public class ScyllaYcsbClient : IDbYcsbClient
         return Response.Ok();
     }
 
-    // InitDb prepares these eagerly; the ?? fallbacks at the call sites only matter when
-    // the table already exists and InitDb was not called on this client instance.
+    // InitDb prepares these eagerly. After DeleteAllData, InitDb must run before any operation;
+    // the ?? fallbacks at the call sites only cover a client where InitDb was not called.
     private async Task<PreparedStatement> PrepareInsert()
     {
         var fieldCols = string.Join(", ", _fieldNames);
@@ -270,7 +260,6 @@ public class ScyllaYcsbClient : IDbYcsbClient
 
     private async Task ExecuteUpdate(string key, Dictionary<string, string> values)
     {
-        // Snapshot the key order once so the prepared statement and the bindings agree.
         var fieldList = values.Keys.ToList();
         var ps = await GetUpdatePs(fieldList);
         await _session.ExecuteAsync(ps.Bind(ScyllaDbHelper.BuildUpdateBindings(key, fieldList, values)));
@@ -309,9 +298,8 @@ public class ScyllaYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> DeleteAllData()
     {
-        // TRUNCATE wipes the table between runs. Relies on InitDb having created it first.
         await _session.ExecuteAsync(new SimpleStatement(
-            $"TRUNCATE TABLE {_keyspace}.{TABLE_NAME}"
+            $"DROP TABLE IF EXISTS {_keyspace}.{TABLE_NAME}"
         ));
 
         return Response.Ok();
