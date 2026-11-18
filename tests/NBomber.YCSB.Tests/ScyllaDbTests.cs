@@ -8,7 +8,8 @@ namespace NBomber.YCSB.Tests
         private const int FIELD_COUNT = 10;
 
         private static readonly Lazy<Cassandra.ISession> RAW_SESSION = new(
-            () => Cassandra.Cluster.Builder().AddContactPoint("localhost").WithPort(9042).Build().Connect());
+            () => Cassandra.Cluster.Builder().AddContactPoint("localhost").WithPort(9042)
+                .WithQueryOptions(new Cassandra.QueryOptions().SetConsistencyLevel(Cassandra.ConsistencyLevel.Quorum)).Build().Connect());
 
         [Fact]
         public void Workload_A_Shold_Execute_50_Read_50_Update()
@@ -137,8 +138,10 @@ namespace NBomber.YCSB.Tests
 
         // ---- Field mapping tests ----
         // These need a running ScyllaDB where ycsb.ycsb_table already exists with the default 10
-        // field columns (e.g. after a workload run / InitDb). They use unique keys and never call
-        // InitDb or DeleteAllData. Stored values are verified through a separate raw CQL session.
+        // field columns (e.g. after a workload run). They use unique keys and do not call InitDb,
+        // except tests that reset the table through DeleteAllData: those call InitDb afterwards,
+        // always with FIELD_COUNT (10) fields, so the table keeps the default columns. Stored
+        // values are verified through a separate raw CQL session.
 
         [Fact]
         public async Task Insert_Stores_Each_Value_In_Its_Own_Column()
@@ -282,9 +285,90 @@ namespace NBomber.YCSB.Tests
             Assert.Equal(ScyllaDbHelper.GetSize(firstKey, subset), response.SizeBytes);
         }
 
+        [Fact]
+        public async Task DeleteAllData_Then_InitDb_Gives_Empty_Table_With_Configured_Columns()
+        {
+            var client = CreateClient();
+            await client.Insert("ycsb_table", NewKey(), DistinctValues());
+
+            var response = await client.DeleteAllData();
+            Assert.False((await client.InitDb()).IsError);
+
+            Assert.False(response.IsError);
+            Assert.Empty(RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement("SELECT ycsb_key FROM ycsb.ycsb_table")));
+
+            var columns = RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement(
+                    "SELECT column_name FROM system_schema.columns WHERE keyspace_name = 'ycsb' AND table_name = 'ycsb_table'"))
+                .Select(r => r.GetValue<string>("column_name"))
+                .ToHashSet();
+            var expected = Enumerable.Range(1, FIELD_COUNT).Select(i => $"field{i}").Append("ycsb_key").ToHashSet();
+            Assert.Equal(expected, columns);
+
+            var key = NewKey();
+            var values = DistinctValues();
+            Assert.False((await client.Insert("ycsb_table", key, values)).IsError);
+            Assert.False((await client.Read("ycsb_table", key, null)).IsError);
+            Assert.False((await client.Scan("ycsb_table", key, 1, null)).IsError);
+        }
+
+        [Fact]
+        public async Task DeleteAllData_Keeps_Other_Tables_In_Keyspace()
+        {
+            var client = CreateClient();
+            var otherTable = $"other_{Guid.NewGuid():N}";
+            RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement(
+                $"CREATE TABLE ycsb.{otherTable} (id text PRIMARY KEY, value text)"));
+
+            try
+            {
+                var response = await client.DeleteAllData();
+
+                Assert.False(response.IsError);
+                var found = RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement(
+                    "SELECT table_name FROM system_schema.tables WHERE keyspace_name = 'ycsb' AND table_name = ?", otherTable));
+                Assert.Single(found);
+            }
+            finally
+            {
+                RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement($"DROP TABLE IF EXISTS ycsb.{otherTable}"));
+                await client.InitDb();
+            }
+        }
+
+        [Fact]
+        public async Task DeleteAllData_On_Fresh_Keyspace_Succeeds_Creates_Nothing_And_InitDb_Then_Works()
+        {
+            var keyspace = $"ycsb_fresh_{Guid.NewGuid():N}";
+            var client = new ScyllaYcsbClient(YcsbCliArgs.ParseProps([
+                "scylladb.hosts=localhost",
+                "scylladb.port=9042",
+                $"scylladb.keyspace={keyspace}",
+                "scylladb.replicationfactor=1",
+                $"fieldcount={FIELD_COUNT}"
+            ]));
+
+            try
+            {
+                var response = await client.DeleteAllData();
+
+                Assert.False(response.IsError);
+                Assert.Empty(RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement(
+                    "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", keyspace)));
+
+                Assert.False((await client.InitDb()).IsError);
+                var key = NewKey();
+                Assert.False((await client.Insert("ycsb_table", key, DistinctValues())).IsError);
+                Assert.False((await client.Read("ycsb_table", key, null)).IsError);
+            }
+            finally
+            {
+                RAW_SESSION.Value.Execute(new Cassandra.SimpleStatement($"DROP KEYSPACE IF EXISTS {keyspace}"));
+            }
+        }
+
         private static ScyllaYcsbClient CreateClient()
             => new(YcsbCliArgs.ParseProps([
-                "scylladb.host=localhost",
+                "scylladb.hosts=localhost",
                 "scylladb.port=9042",
                 $"fieldcount={FIELD_COUNT}"
             ]));
@@ -339,7 +423,7 @@ namespace NBomber.YCSB.Tests
                 ZeroPadding = 1,
                 InsertOrder = "hashed",
                 Props = [
-                    "scylladb.host=localhost",
+                    "scylladb.hosts=localhost",
                     "scylladb.port=9042"
                 ]
             };

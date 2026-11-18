@@ -17,26 +17,11 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     public const string COLUMN_NAME = "ycsb_value";
     public const string TABLE_NAME = "ycsb_table";
 
+    private const string TABLE_COLUMNS = $"{PRIMARY_KEY} VARCHAR(255) PRIMARY KEY NOT NULL, {COLUMN_NAME} JSONB NOT NULL";
+
     public PostgresNoSQLYcsbClient(Dictionary<string, string> props)
     {
-        var host = YcsbCliArgs.TryGet(props, "postgres.host", defaultValue: "localhost");
-        var port = YcsbCliArgs.TryGet(props, "postgres.port", defaultValue: "5432");
-        var database = YcsbCliArgs.TryGet(props, "postgres.database", defaultValue: "test");
-        var user = YcsbCliArgs.TryGet(props, "postgres.user", defaultValue: "postgres");
-        var password = YcsbCliArgs.TryGet(props, "postgres.password", "postgres");
-
-        var builder = new NpgsqlConnectionStringBuilder
-        {
-            Host = host,
-            Port = int.Parse(port),
-            Database = database,
-            Username = user,
-            Password = password,
-            MinPoolSize = 1,
-            MaxPoolSize = 100
-        };
-
-        _dataSource = NpgsqlDataSource.Create(builder);
+        _dataSource = NpgsqlDataSource.Create(PostgresNoSQLHelper.BuildConnectionString(props));
     }
 
     public async Task<Response<object>> InitDb()
@@ -45,32 +30,9 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         {
             await using var conn = await _dataSource.OpenConnectionAsync();
 
-            string checkTableSql = $@"
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables
-                        WHERE table_schema = 'public'
-                        AND table_name = '{TABLE_NAME}'
-                    )";
+            using var cmd = new NpgsqlCommand($"CREATE TABLE IF NOT EXISTS {TABLE_NAME} ({TABLE_COLUMNS})", conn);
 
-            using var checkCmd = new NpgsqlCommand(checkTableSql, conn);
-
-            bool exists = (bool)await checkCmd.ExecuteScalarAsync();
-
-            if (!exists)
-            {
-                string createTableAndIndexSql = $@"
-                    CREATE TABLE {TABLE_NAME} (
-                        {PRIMARY_KEY} VARCHAR(255) PRIMARY KEY NOT NULL,
-                        {COLUMN_NAME} JSONB NOT NULL
-                    );
-
-                    CREATE INDEX idx_{TABLE_NAME}_jsonb
-                    ON {TABLE_NAME} USING GIN ({COLUMN_NAME});";
-
-                using var cmd = new NpgsqlCommand(createTableAndIndexSql, conn);
-
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await cmd.ExecuteNonQueryAsync();
 
             return Response.Ok();
         }
@@ -105,29 +67,18 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> Read(string table, string key, HashSet<string>? fields)
     {
-        string sql;
-
-        if (fields == null || fields.Count == 0)
-        {
-            sql = $@"
-                SELECT {COLUMN_NAME}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} = @key";
-        }
-        else
-        {
-            var fieldSelectors = string.Join(", ",
-                fields.Select(f => $"'{f}', {COLUMN_NAME}->'{f}'"));
-
-            sql = $@"
-                SELECT jsonb_build_object({fieldSelectors}) as {COLUMN_NAME}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} = @key";
-        }
-
         await using var conn = await _dataSource.OpenConnectionAsync();
 
-        using var cmd = new NpgsqlCommand(sql, conn);
+        using var cmd = new NpgsqlCommand(null, conn);
+
+        string selected = fields == null || fields.Count == 0
+            ? COLUMN_NAME
+            : $"{PostgresNoSQLHelper.BuildProjection(fields, cmd.Parameters)} as {COLUMN_NAME}";
+
+        cmd.CommandText = $@"
+                SELECT {selected}
+                FROM {TABLE_NAME}
+                WHERE {PRIMARY_KEY} = @key";
 
         cmd.Parameters.AddWithValue("@key", key);
 
@@ -146,33 +97,20 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string>? fields)
     {
-        string sql;
-
-        if (fields == null || fields.Count == 0)
-        {
-            sql = $@"
-                SELECT {PRIMARY_KEY}, {COLUMN_NAME}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} >= @startKey
-                ORDER BY {PRIMARY_KEY}
-                LIMIT @count";
-        }
-        else
-        {
-            var fieldSelectors = string.Join(", ",
-                fields.Select(f => $"'{f}', {COLUMN_NAME}->'{f}'"));
-
-            sql = $@"
-                SELECT {PRIMARY_KEY}, jsonb_build_object({fieldSelectors}) as {COLUMN_NAME}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} >= @startKey
-                ORDER BY {PRIMARY_KEY}
-                LIMIT @count";
-        }
-
         await using var conn = await _dataSource.OpenConnectionAsync();
 
-        using var cmd = new NpgsqlCommand(sql, conn);
+        using var cmd = new NpgsqlCommand(null, conn);
+
+        string selected = fields == null || fields.Count == 0
+            ? COLUMN_NAME
+            : $"{PostgresNoSQLHelper.BuildProjection(fields, cmd.Parameters)} as {COLUMN_NAME}";
+
+        cmd.CommandText = $@"
+                SELECT {PRIMARY_KEY}, {selected}
+                FROM {TABLE_NAME}
+                WHERE {PRIMARY_KEY} >= @startKey
+                ORDER BY {PRIMARY_KEY}
+                LIMIT @count";
 
         cmd.Parameters.AddWithValue("@startKey", startKey);
         cmd.Parameters.AddWithValue("@count", count);
@@ -194,30 +132,19 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> ReadModifyWrite(string table, string key, HashSet<string>? fields, Dictionary<string, string> values)
     {
-        // Read phase
-        string readSql;
-
-        if (fields == null || fields.Count == 0)
-        {
-            readSql = $@"
-                SELECT {COLUMN_NAME}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} = @key";
-        }
-        else
-        {
-            var fieldSelectors = string.Join(", ",
-                fields.Select(f => $"'{f}', {COLUMN_NAME}->'{f}'"));
-
-            readSql = $@"
-                SELECT jsonb_build_object({fieldSelectors}) as {COLUMN_NAME}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} = @key";
-        }
-
         await using var conn = await _dataSource.OpenConnectionAsync();
 
-        using var readCmd = new NpgsqlCommand(readSql, conn);
+        using var readCmd = new NpgsqlCommand(null, conn);
+
+        string selected = fields == null || fields.Count == 0
+            ? COLUMN_NAME
+            : $"{PostgresNoSQLHelper.BuildProjection(fields, readCmd.Parameters)} as {COLUMN_NAME}";
+
+        readCmd.CommandText = $@"
+                SELECT {selected}
+                FROM {TABLE_NAME}
+                WHERE {PRIMARY_KEY} = @key";
+
         readCmd.Parameters.AddWithValue("@key", key);
 
         var result = await readCmd.ExecuteScalarAsync();
@@ -228,7 +155,6 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         string readJson = result.ToString();
         long size = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(readJson);
 
-        // Update phase
         string updateJson = JsonSerializer.Serialize(values);
 
         string UpdateSql = $@"
@@ -239,7 +165,10 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         updateCmd.Parameters.AddWithValue("@key", key);
         updateCmd.Parameters.AddWithValue("@json", updateJson);
 
-        await updateCmd.ExecuteNonQueryAsync();
+        var rows = await updateCmd.ExecuteNonQueryAsync();
+
+        if (rows == 0)
+            return Response.Fail(statusCode: "no data");
 
         size += Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(updateJson);
 
@@ -262,7 +191,10 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         cmd.Parameters.AddWithValue("@key", key);
         cmd.Parameters.AddWithValue("@json", jsonValue);
 
-        await cmd.ExecuteNonQueryAsync();
+        var rows = await cmd.ExecuteNonQueryAsync();
+
+        if (rows == 0)
+            return Response.Fail(statusCode: "no data");
 
         var sizeBytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
 
@@ -279,7 +211,6 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
             var tasks = chunks.Select(async chunk =>
             {
-                // Each task gets its own connection from the pool
                 await using var conn = await _dataSource.OpenConnectionAsync();
 
                 var batch = new NpgsqlBatch(conn);
@@ -317,7 +248,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         try
         {
-            string sql = $"TRUNCATE TABLE {TABLE_NAME}";
+            string sql = $"DROP TABLE IF EXISTS {TABLE_NAME}";
 
             await using var conn = await _dataSource.OpenConnectionAsync();
 

@@ -160,6 +160,31 @@ namespace NBomber.YCSB.Tests
             });
         }
 
+        [Fact]
+        public async Task DeleteAllData_Succeeds_On_Never_Used_Database_Then_InitDb_Works()
+        {
+            var props = YcsbCliArgs.ParseProps([
+                "ravendb.url=http://localhost:8080",
+                $"ravendb.database=ycsb_fresh_{Guid.NewGuid():N}"
+            ]);
+
+            var client = new RavenDbYcsbClient(props);
+
+            try
+            {
+                Assert.False((await client.DeleteAllData()).IsError);
+                Assert.False((await client.InitDb()).IsError);
+
+                var values = new Dictionary<string, string> { ["field1"] = "value1" };
+                Assert.False((await client.Insert("ycsb_table", "user1", values)).IsError);
+                Assert.False((await client.Read("ycsb_table", "user1", null)).IsError);
+            }
+            finally
+            {
+                await client.DeleteAllData();
+            }
+        }
+
         private Contracts.Stats.NodeStats RunWorkload(Workload workload, ulong recordCount, int operationCount)
         {
             var settings = new YcsbCliArgs

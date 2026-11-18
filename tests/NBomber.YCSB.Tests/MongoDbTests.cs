@@ -1,3 +1,5 @@
+using MongoDB.Bson;
+using MongoDB.Driver;
 using NBomber.YCSB.Infra;
 using NBomber.YCSB.MongoDb;
 
@@ -158,6 +160,158 @@ namespace NBomber.YCSB.Tests
 
                 return Task.CompletedTask;
             });
+        }
+
+        [Fact]
+        public async Task Scan_Should_Read_Up_To_Count_Records_In_Id_Order_From_Start_Key()
+        {
+            await WithTable(async (client, table, col) =>
+            {
+                var docs = await SeedTen(client, table);
+
+                var response = await client.Scan(table, "k03", 5, []);
+
+                Assert.False(response.IsError);
+                Assert.Equal(docs.Skip(2).Take(5).Sum(MongoDbHelper.GetSize), response.SizeBytes);
+
+                // near the end of the key range only the two remaining records are read
+                var tail = await client.Scan(table, "k09", 5, []);
+
+                Assert.False(tail.IsError);
+                Assert.Equal(docs.Skip(8).Sum(MongoDbHelper.GetSize), tail.SizeBytes);
+
+                var empty = await client.Scan(table, "k99", 5, []);
+
+                Assert.True(empty.IsError);
+                Assert.Equal("no data", empty.StatusCode);
+            });
+        }
+
+        [Fact]
+        public async Task Read_Should_Return_Only_Requested_Field()
+        {
+            await WithTable(async (client, table, col) =>
+            {
+                var docs = await SeedTen(client, table);
+
+                var response = await client.Read(table, "k01", ["field3"]);
+
+                var expected = new BsonDocument { ["_id"] = "k01", ["field3"] = docs[0]["field3"] };
+
+                Assert.False(response.IsError);
+                Assert.Equal(MongoDbHelper.GetSize(expected), response.SizeBytes);
+            });
+        }
+
+        [Fact]
+        public async Task Missing_Key_Should_Return_No_Data()
+        {
+            await WithTable(async (client, table, col) =>
+            {
+                await SeedTen(client, table);
+
+                var read = await client.Read(table, "missing", null);
+                var rmw = await client.ReadModifyWrite(table, "missing", null, new Dictionary<string, string> { ["field1"] = "x" });
+                var update = await client.Update(table, "missing", new Dictionary<string, string> { ["field1"] = "x" });
+
+                foreach (var response in new[] { read, rmw, update })
+                {
+                    Assert.True(response.IsError);
+                    Assert.Equal("no data", response.StatusCode);
+                }
+            });
+        }
+
+        [Fact]
+        public async Task Update_Should_Preserve_Other_Fields_And_Add_No_Timestamps()
+        {
+            await WithTable(async (client, table, col) =>
+            {
+                await SeedTen(client, table);
+
+                var update = await client.Update(table, "k01", new Dictionary<string, string> { ["field2"] = "new" });
+                var rmw = await client.ReadModifyWrite(table, "k02", ["field1"], new Dictionary<string, string> { ["field2"] = "new" });
+
+                Assert.False(update.IsError);
+                Assert.False(rmw.IsError);
+
+                foreach (var key in new[] { "k01", "k02" })
+                {
+                    var doc = await col.Find(MongoDbHelper.BuildFilter(key)).FirstAsync();
+
+                    Assert.Equal(new[] { "_id", "field1", "field2", "field3" }, doc.Names.ToArray());
+                    Assert.Equal("new", doc["field2"].AsString);
+                    Assert.Equal($"{key}-field1", doc["field1"].AsString);
+                    Assert.Equal($"{key}-field3", doc["field3"].AsString);
+                }
+            });
+        }
+
+        [Fact]
+        public async Task DeleteAllData_Should_Drop_Only_Ycsb_Database()
+        {
+            var props = YcsbCliArgs.ParseProps(["mongodb.host=localhost", "mongodb.port=27017"]);
+            var client = new MongoDbYcsbClient(props);
+
+            var mongo = new MongoClient("mongodb://localhost:27017");
+            var otherName = $"ycsb_other_{Guid.NewGuid():N}";
+            var other = mongo.GetDatabase(otherName);
+
+            try
+            {
+                await other.GetCollection<BsonDocument>("data").InsertOneAsync(new BsonDocument { ["_id"] = "k01" });
+                await mongo.GetDatabase("ycsb").GetCollection<BsonDocument>("ycsb_reset_test").InsertOneAsync(new BsonDocument { ["_id"] = "k01" });
+
+                var response = await client.DeleteAllData();
+
+                Assert.False(response.IsError);
+                Assert.Equal(1, await other.GetCollection<BsonDocument>("data").CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty));
+                Assert.Empty(await (await mongo.GetDatabase("ycsb").ListCollectionNamesAsync()).ToListAsync());
+            }
+            finally
+            {
+                await mongo.DropDatabaseAsync(otherName);
+            }
+        }
+
+        private static async Task WithTable(Func<MongoDbYcsbClient, string, IMongoCollection<BsonDocument>, Task> test)
+        {
+            var props = YcsbCliArgs.ParseProps(["mongodb.host=localhost", "mongodb.port=27017"]);
+            var client = new MongoDbYcsbClient(props);
+
+            // unique collection per test, so only own data is touched
+            var table = $"ycsb_test_{Guid.NewGuid():N}";
+            var db = new MongoClient("mongodb://localhost:27017").GetDatabase("ycsb");
+
+            try
+            {
+                await test(client, table, db.GetCollection<BsonDocument>(table));
+            }
+            finally
+            {
+                await db.DropCollectionAsync(table);
+            }
+        }
+
+        private static async Task<List<BsonDocument>> SeedTen(MongoDbYcsbClient client, string table)
+        {
+            var docs = new List<BsonDocument>();
+
+            for (var i = 1; i <= 10; i++)
+            {
+                var key = $"k{i:00}";
+                var values = new Dictionary<string, string>
+                {
+                    ["field1"] = $"{key}-field1",
+                    ["field2"] = $"{key}-field2",
+                    ["field3"] = $"{key}-field3"
+                };
+
+                await client.Insert(table, key, values);
+                docs.Add(MongoDbHelper.BuildDocument(key, values));
+            }
+
+            return docs;
         }
 
         private Contracts.Stats.NodeStats RunWorkload(Workload workload)

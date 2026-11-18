@@ -45,20 +45,9 @@ public class RavenDbYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> InitDb()
     {
-        try
-        {
-            await _store.Maintenance.Server.SendAsync(
-                new DeleteDatabasesOperation(_databaseName, hardDelete: true));
-        }
-        catch (DatabaseDoesNotExistException)
-        {
-            // nothing to delete on a fresh server
-        }
-
         await _store.Maintenance.Server.SendAsync(
             new CreateDatabaseOperation(new DatabaseRecord(_databaseName)));
 
-        // Warm up the connection pool before the benchmark starts.
         using var warmup = _store.OpenAsyncSession();
         await warmup.LoadAsync<DataDbRecord>("_warmup_");
 
@@ -138,7 +127,7 @@ public class RavenDbYcsbClient : IDbYcsbClient
     // Index-free range scan: LoadStartingWith reads documents straight from the id-ordered
     // document store (GET /docs?startsWith=), so it never touches the query/indexing engine.
     // A dynamic "where id() >= x order by id()" query would instead build an auto-index that has
-    // to be rebuilt on every run (InitDb recreates the database), making scans slow and stale.
+    // to be rebuilt on every run (each run resets the database and then creates it), making scans slow and stale.
     public async Task<Response<object>> Scan(string table, string startKey, int count, HashSet<string>? fields)
     {
         using var session = _store.OpenAsyncSession();
@@ -159,9 +148,15 @@ public class RavenDbYcsbClient : IDbYcsbClient
 
     public async Task<Response<object>> DeleteAllData()
     {
-        var op = await _store.Operations.SendAsync(
-            new DeleteByQueryOperation("from @all_docs"));
-        await op.WaitForCompletionAsync(TimeSpan.FromSeconds(60));
+        try
+        {
+            await _store.Maintenance.Server.SendAsync(
+                new DeleteDatabasesOperation(_databaseName, hardDelete: true));
+        }
+        catch (DatabaseDoesNotExistException)
+        {
+        }
+
         return Response.Ok<object>();
     }
 

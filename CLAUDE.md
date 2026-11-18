@@ -13,7 +13,7 @@ dotnet build NBomber.YCSB.sln          # NuGet audit warnings NU1900-NU1904 are 
 dotnet run --project src/NBomber.YCSB -- run --workload A --db redis -p redis.host=localhost -p redis.port=6379
 
 # Offline tests (no database needed)
-dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~DataGeneratorTests|FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests|FullyQualifiedName~ZipfianExtensionsTests"
+dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~DataGeneratorTests|FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests|FullyQualifiedName~ZipfianExtensionsTests|FullyQualifiedName~MongoDbHelperTests|FullyQualifiedName~PostgresNoSQLHelperTests"
 
 # Single test
 dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName=NBomber.YCSB.Tests.ScanLengthTests.Validator_Accepts_Defaults"
@@ -23,12 +23,12 @@ docker compose -f src/NBomber.YCSB/Redis/docker-compose.yml up -d --wait
 dotnet test tests/NBomber.YCSB.Tests --filter "NBomber.YCSB.Tests.RedisTests"
 ```
 
-Live test classes (`<Db>Tests`) need that folder's compose stack running on its default local ports. Their `Workload_*` tests run real workloads, which call `InitDb` + `DeleteAllData` first. Cleanup is destructive and differs per backend:
+Live test classes (`<Db>Tests`) need that folder's compose stack running on its default local ports. Their `Workload_*` tests run real workloads, which call `DeleteAllData`, then `InitDb`, first. Cleanup is destructive and differs per backend:
 - Redis flushes the whole database.
-- MongoDB drops every non-system database.
+- MongoDB drops the `ycsb` database only (other databases untouched).
 - RavenDB hard-deletes its database.
-- Scylla drops and recreates `ycsb_table`.
-- Postgres truncates `ycsb_table`.
+- Scylla drops `ycsb_table` (keyspace kept); `InitDb` recreates it.
+- Postgres drops `ycsb_table` (other tables untouched); `InitDb` recreates it.
 
 Only run live tests against the project's own disposable containers, after checking nothing else (another project's container, a WSL service) is serving the port. Use exact `FullyQualifiedName=` filters when running individual live tests.
 
@@ -36,7 +36,7 @@ Only run live tests against the project's own disposable containers, after check
 
 Flow: `Program.cs` parses the `run` command into `YcsbCliArgs`, validates it with `YcsbCliArgsValidator` (FluentValidation), picks a client in `GetYcsbClient` by `--db`, then calls `YcsbScenario.Run`.
 
-- `YcsbScenario` builds one NBomber scenario. Init runs `InitDb`, then `DeleteAllData`, then `BulkInsert` of `recordcount` generated records. Each iteration picks an operation with `context.Random.Choice` over the workload's weighted operations and runs it as a named step. The load is `IterationsForConstant(threadcount, operationcount)`; `operationcount` is a total across copies, like YCSB. Step names (`read`, `update`, `insert`, `scan`, `read latest`, `read-modify-write`) are asserted by the live tests, so don't rename them. There is no warm-up unless `--warmup <seconds>` is set; warm-up operations are extra, unmeasured and change data.
+- `YcsbScenario` builds one NBomber scenario. Init runs `DeleteAllData` (removes benchmark data, may drop the table or database), then `InitDb` (creates what the run needs), then `BulkInsert` of `recordcount` generated records. Each iteration picks an operation with `context.Random.Choice` over the workload's weighted operations and runs it as a named step. The load is `IterationsForConstant(threadcount, operationcount)`; `operationcount` is a total across copies, like YCSB. Step names (`read`, `update`, `insert`, `scan`, `read latest`, `read-modify-write`) are asserted by the live tests, so don't rename them. There is no warm-up unless `--warmup <seconds>` is set; warm-up operations are extra, unmeasured and change data.
 - `src/NBomber.YCSB/Infra` holds the shared YCSB Core. Keep Core behaviour here, not in database clients:
   - `YcsbCliArgs`: typed options for Core settings (`--fieldcount`, `--minscanlength`, ...), plus `-p key=value` props that are passed to the database client.
   - `Workload.cs`: `WorkloadManager` per-workload presets (operation mix, defaults such as max scan length).
@@ -53,7 +53,8 @@ Flow: `Program.cs` parses the `run` command into `YcsbCliArgs`, validates it wit
 - `--exportfile dir/name` writes `dir/name.{csv,html,md,txt}` without a timestamp folder (repeated runs overwrite); a bare name goes to `reports/<timestamp>/`.
 - Results produced before `--warmup` existed used a fixed 3-second warm-up and may not be directly comparable with default (no warm-up) runs; `--warmup 3` reproduces the old behaviour.
 - Read, update, scan and read-modify-write choose keys with YCSB's scrambled zipfian (0.99) in `DataGenerator.GetKeyZipf`. `recordcount 0` is rejected for all workloads (A-F). Results from before this change are not directly comparable. Read latest (workload D) uses YCSB's Gray zipfian draw with incremental zeta (`DataGenerator.GetKeyLatest`); workload D results from before this change are not directly comparable.
-- Known deviations from Java YCSB are tracked as future OpenSpec changes: no acknowledged-insert counter, xxHash instead of FNV, 1-based keys and `field1..N` names, the whole dataset built in memory, MongoDB/RavenDB/Scylla scan semantics.
+- Known deviations from Java YCSB are tracked as future OpenSpec changes: no acknowledged-insert counter, xxHash instead of FNV, 1-based keys and `field1..N` names, the whole dataset built in memory, RavenDB/Scylla scan semantics.
+- Client fixes aligned with the Java bindings; results from before them are not directly comparable for these databases. MongoDB: flat `{ _id, field1..N }` documents, `_id >= startKey` scan, `w:1`. PostgreSQL: no GIN index (a legacy `idx_ycsb_table_jsonb` disappears because `DeleteAllData` drops `ycsb_table`), Npgsql auto-prepare. ScyllaDB: QUORUM consistency for every operation, so a single node needs `-p scylladb.replicationfactor=1` (drop an existing RF-3 `ycsb` keyspace first).
 
 ## Workflow (OpenSpec + subagents)
 

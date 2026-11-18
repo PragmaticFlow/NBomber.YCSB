@@ -319,6 +319,8 @@ namespace NBomber.YCSB.Tests
 
                 Assert.False(response.IsError);
 
+                await client.InitDb();
+
                 await using var countCmd = dataSource.CreateCommand(
                     $"SELECT count(*) FROM {PostgresNoSQLYcsbClient.TABLE_NAME}");
 
@@ -338,7 +340,7 @@ namespace NBomber.YCSB.Tests
                 }
 
                 Assert.Contains($"{PostgresNoSQLYcsbClient.TABLE_NAME}_pkey", indexNames);
-                Assert.Contains($"idx_{PostgresNoSQLYcsbClient.TABLE_NAME}_jsonb", indexNames);
+                Assert.DoesNotContain($"idx_{PostgresNoSQLYcsbClient.TABLE_NAME}_jsonb", indexNames);
 
                 var insertResponse = await client.Insert("usertable", key3, CreateFields(3, "c"));
                 Assert.False(insertResponse.IsError);
@@ -355,6 +357,167 @@ namespace NBomber.YCSB.Tests
         }
 
         [Fact]
+        public async Task DeleteAllData_Removes_Leftover_Index_And_Leaves_Only_Primary_Key()
+        {
+            var client = CreateClient();
+            await client.InitDb();
+
+            var key = "test_" + Guid.NewGuid();
+            await using var dataSource = CreateDataSource();
+
+            try
+            {
+                await client.Insert("usertable", key, CreateFields(3, "orig"));
+
+                await using (var createCmd = dataSource.CreateCommand(
+                    $"CREATE INDEX IF NOT EXISTS idx_{PostgresNoSQLYcsbClient.TABLE_NAME}_jsonb " +
+                    $"ON {PostgresNoSQLYcsbClient.TABLE_NAME} USING GIN ({PostgresNoSQLYcsbClient.COLUMN_NAME})"))
+                {
+                    await createCmd.ExecuteNonQueryAsync();
+                }
+
+                var response = await client.DeleteAllData();
+
+                Assert.False(response.IsError);
+
+                await client.InitDb();
+
+                await using var indexCmd = dataSource.CreateCommand(
+                    "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = @t");
+
+                indexCmd.Parameters.AddWithValue("@t", PostgresNoSQLYcsbClient.TABLE_NAME);
+
+                var indexNames = new List<string>();
+
+                await using (var reader = await indexCmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                        indexNames.Add(reader.GetString(0));
+                }
+
+                Assert.Equal([$"{PostgresNoSQLYcsbClient.TABLE_NAME}_pkey"], indexNames);
+
+                await using var countCmd = dataSource.CreateCommand(
+                    $"SELECT count(*) FROM {PostgresNoSQLYcsbClient.TABLE_NAME}");
+
+                Assert.Equal(0L, (long)(await countCmd.ExecuteScalarAsync())!);
+
+                var insertResponse = await client.Insert("usertable", key, CreateFields(3, "new"));
+
+                Assert.False(insertResponse.IsError);
+            }
+            finally
+            {
+                await DeleteRow(dataSource, key);
+            }
+        }
+
+        [Fact]
+        public async Task DeleteAllData_Leaves_Other_Tables_Untouched()
+        {
+            var client = CreateClient();
+            await client.InitDb();
+
+            var otherTable = "ycsb_other_" + Guid.NewGuid().ToString("N");
+            await using var dataSource = CreateDataSource();
+
+            try
+            {
+                await using (var createCmd = dataSource.CreateCommand(
+                    $"CREATE TABLE {otherTable} (id INT PRIMARY KEY); INSERT INTO {otherTable} (id) VALUES (1)"))
+                {
+                    await createCmd.ExecuteNonQueryAsync();
+                }
+
+                var response = await client.DeleteAllData();
+
+                Assert.False(response.IsError);
+
+                await using var countCmd = dataSource.CreateCommand($"SELECT count(*) FROM {otherTable}");
+
+                Assert.Equal(1L, (long)(await countCmd.ExecuteScalarAsync())!);
+            }
+            finally
+            {
+                await using var dropCmd = dataSource.CreateCommand($"DROP TABLE IF EXISTS {otherTable}");
+
+                await dropCmd.ExecuteNonQueryAsync();
+
+                await client.InitDb();
+            }
+        }
+
+        [Fact]
+        public async Task Update_Missing_Key_Returns_No_Data_And_Creates_No_Row()
+        {
+            var client = CreateClient();
+            await client.InitDb();
+
+            var key = "test_" + Guid.NewGuid();
+            await using var dataSource = CreateDataSource();
+
+            var response = await client.Update("usertable", key,
+                new Dictionary<string, string> { ["field1"] = "x" });
+
+            Assert.True(response.IsError);
+            Assert.Equal("no data", response.StatusCode);
+
+            await AssertRowMissing(dataSource, key);
+        }
+
+        [Fact]
+        public async Task ReadModifyWrite_Missing_Key_Returns_No_Data_And_Creates_No_Row()
+        {
+            var client = CreateClient();
+            await client.InitDb();
+
+            var key = "test_" + Guid.NewGuid();
+            await using var dataSource = CreateDataSource();
+
+            var response = await client.ReadModifyWrite("usertable", key,
+                new HashSet<string> { "field1" },
+                new Dictionary<string, string> { ["field2"] = "x" });
+
+            Assert.True(response.IsError);
+            Assert.Equal("no data", response.StatusCode);
+
+            await AssertRowMissing(dataSource, key);
+        }
+
+        [Fact]
+        public async Task Read_Projected_Fields_Returns_Size()
+        {
+            var client = CreateClient();
+            await client.InitDb();
+
+            var key = "test_" + Guid.NewGuid();
+            await using var dataSource = CreateDataSource();
+
+            try
+            {
+                await client.Insert("usertable", key, CreateFields(10, "orig"));
+
+                // More than the auto-prepare threshold so both unprepared and prepared executions are covered.
+                for (var i = 0; i < 10; i++)
+                {
+                    var response = await client.Read("usertable", key, new HashSet<string> { i % 2 == 0 ? "field1" : "field7" });
+
+                    Assert.False(response.IsError);
+                    Assert.True(response.SizeBytes > 0);
+                }
+
+                var scanResponse = await client.Scan("usertable", key, 5, new HashSet<string> { "field1", "field7" });
+
+                Assert.False(scanResponse.IsError);
+                Assert.True(scanResponse.SizeBytes > 0);
+            }
+            finally
+            {
+                await DeleteRow(dataSource, key);
+            }
+        }
+
+        [Fact]
         public async Task DeleteAllData_Succeeds_On_Empty_Table()
         {
             var client = CreateClient();
@@ -365,8 +528,11 @@ namespace NBomber.YCSB.Tests
             var firstResponse = await client.DeleteAllData();
             Assert.False(firstResponse.IsError);
 
+            // Second reset runs while the table does not exist (no InitDb in between).
             var secondResponse = await client.DeleteAllData();
             Assert.False(secondResponse.IsError);
+
+            await client.InitDb();
 
             await using var countCmd = dataSource.CreateCommand(
                 $"SELECT count(*) FROM {PostgresNoSQLYcsbClient.TABLE_NAME}");
@@ -390,6 +556,8 @@ namespace NBomber.YCSB.Tests
                 var response = await client.DeleteAllData();
 
                 Assert.False(response.IsError);
+
+                await client.InitDb();
 
                 var fresh = CreateFields(2, "new");
 
@@ -437,7 +605,6 @@ namespace NBomber.YCSB.Tests
             return new PostgresNoSQLYcsbClient(CreateProps());
         }
 
-        // Separate data source (same connection settings as the client) used to verify stored values directly.
         private static NpgsqlDataSource CreateDataSource()
         {
             var builder = new NpgsqlConnectionStringBuilder
@@ -472,7 +639,16 @@ namespace NBomber.YCSB.Tests
             return JsonSerializer.Deserialize<Dictionary<string, string>>(json)!;
         }
 
-        // Removes only the row created by the test.
+        private static async Task AssertRowMissing(NpgsqlDataSource dataSource, string key)
+        {
+            await using var cmd = dataSource.CreateCommand(
+                $"SELECT count(*) FROM {PostgresNoSQLYcsbClient.TABLE_NAME} WHERE {PostgresNoSQLYcsbClient.PRIMARY_KEY} = @k");
+
+            cmd.Parameters.AddWithValue("@k", key);
+
+            Assert.Equal(0L, (long)(await cmd.ExecuteScalarAsync())!);
+        }
+
         private static async Task DeleteRow(NpgsqlDataSource dataSource, string key)
         {
             await using var cmd = dataSource.CreateCommand(

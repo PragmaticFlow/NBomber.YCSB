@@ -42,14 +42,12 @@ public static class ScyllaDbHelper
         return bindings;
     }
 
-    // Cache key for a prepared statement: the ordered field list.
     public static string BuildFieldsKey(IReadOnlyList<string> fields) => string.Join(",", fields);
 
     public static string BuildCreateKeyspaceCql(string keyspace, int replicationFactor)
         => $"CREATE KEYSPACE IF NOT EXISTS {keyspace} " +
            $"WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': {replicationFactor}}}";
 
-    // Only the listed columns are SET; all other columns are left untouched.
     public static string BuildUpdateCql(IReadOnlyList<string> fields, string keyspace, string table, string primaryKey)
     {
         var setClauses = string.Join(", ", fields.Select(f => $"{f} = ?"));
@@ -64,7 +62,6 @@ public static class ScyllaDbHelper
         => $"SELECT {primaryKey}, {string.Join(", ", fields)} FROM {keyspace}.{table} " +
            $"WHERE TOKEN({primaryKey}) >= TOKEN(?) LIMIT ?";
 
-    // Reads all field columns starting at columnOffset.
     public static Dictionary<string, string> ExtractAllFields(Row row, string[] fieldNames, int columnOffset)
     {
         var result = new Dictionary<string, string>(fieldNames.Length);
@@ -78,7 +75,6 @@ public static class ScyllaDbHelper
         return result;
     }
 
-    // Reads only the requested subset of columns (in SELECT order).
     public static Dictionary<string, string> ExtractFields(Row row, List<string> fields, int columnOffset)
     {
         var result = new Dictionary<string, string>(fields.Count);
