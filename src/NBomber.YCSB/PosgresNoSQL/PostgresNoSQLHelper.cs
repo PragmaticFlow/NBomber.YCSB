@@ -1,5 +1,6 @@
 using NBomber.YCSB.Infra;
 using Npgsql;
+using System.Text;
 
 namespace NBomber.YCSB.PosgresNoSQL;
 
@@ -44,4 +45,7 @@ public static class PostgresNoSQLHelper
 
         return $"jsonb_build_object({string.Join(", ", selectors)})";
     }
+
+    public static long GetSize(string key, string json) =>
+        Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(json);
 }

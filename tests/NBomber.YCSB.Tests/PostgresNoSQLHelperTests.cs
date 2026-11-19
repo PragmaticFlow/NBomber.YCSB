@@ -50,5 +50,23 @@ namespace NBomber.YCSB.Tests
             Assert.Equal("field1", parameters["f0"].Value);
             Assert.Equal("field7", parameters["f1"].Value);
         }
+
+        [Fact]
+        public void GetSize_Sums_Key_And_Json_Lengths()
+        {
+            Assert.Equal(16, PostgresNoSQLHelper.GetSize("user1", "{\"a\":\"bcd\"}"));
+        }
+
+        [Fact]
+        public void GetSize_Counts_Utf8_Bytes()
+        {
+            Assert.Equal(7, PostgresNoSQLHelper.GetSize("key", "éé"));
+        }
+
+        [Fact]
+        public void GetSize_Returns_Key_Length_For_Empty_Json()
+        {
+            Assert.Equal(5, PostgresNoSQLHelper.GetSize("user1", ""));
+        }
     }
 }
