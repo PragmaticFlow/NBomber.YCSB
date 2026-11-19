@@ -1,10 +1,7 @@
 ﻿using NBomber.Contracts;
 using NBomber.CSharp;
 using NBomber.YCSB.DAL;
-using NBomber.YCSB.Infra;
 using Npgsql;
-using Spectre.Console;
-using System.Text;
 using System.Text.Json;
 
 namespace NBomber.YCSB.PosgresNoSQL;
@@ -60,7 +57,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
 
         await cmd.ExecuteNonQueryAsync();
 
-        var sizeBytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
+        var sizeBytes = PostgresNoSQLHelper.GetSize(key, jsonValue);
 
         return Response.Ok(sizeBytes: sizeBytes);
     }
@@ -69,18 +66,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         await using var conn = await _dataSource.OpenConnectionAsync();
 
-        using var cmd = new NpgsqlCommand(null, conn);
-
-        string selected = fields == null || fields.Count == 0
-            ? COLUMN_NAME
-            : $"{PostgresNoSQLHelper.BuildProjection(fields, cmd.Parameters)} as {COLUMN_NAME}";
-
-        cmd.CommandText = $@"
-                SELECT {selected}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} = @key";
-
-        cmd.Parameters.AddWithValue("@key", key);
+        using var cmd = CreateReadCommand(conn, key, fields);
 
         var result = await cmd.ExecuteScalarAsync();
 
@@ -90,7 +76,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         }
 
         string jsonValue = result.ToString();
-        var sizeBytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
+        var sizeBytes = PostgresNoSQLHelper.GetSize(key, jsonValue);
 
         return Response.Ok(sizeBytes: sizeBytes);
     }
@@ -124,7 +110,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             var key = reader.GetString(0);
             var jsonValue = reader.GetValue(1)?.ToString() ?? "";
 
-            sizeBytes += Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
+            sizeBytes += PostgresNoSQLHelper.GetSize(key, jsonValue);
         }
 
         return Response.Ok(sizeBytes: sizeBytes);
@@ -134,18 +120,7 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         await using var conn = await _dataSource.OpenConnectionAsync();
 
-        using var readCmd = new NpgsqlCommand(null, conn);
-
-        string selected = fields == null || fields.Count == 0
-            ? COLUMN_NAME
-            : $"{PostgresNoSQLHelper.BuildProjection(fields, readCmd.Parameters)} as {COLUMN_NAME}";
-
-        readCmd.CommandText = $@"
-                SELECT {selected}
-                FROM {TABLE_NAME}
-                WHERE {PRIMARY_KEY} = @key";
-
-        readCmd.Parameters.AddWithValue("@key", key);
+        using var readCmd = CreateReadCommand(conn, key, fields);
 
         var result = await readCmd.ExecuteScalarAsync();
 
@@ -153,24 +128,17 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
             return Response.Fail(statusCode: "no data");
 
         string readJson = result.ToString();
-        long size = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(readJson);
+        long size = PostgresNoSQLHelper.GetSize(key, readJson);
 
         string updateJson = JsonSerializer.Serialize(values);
 
-        string UpdateSql = $@"
-            UPDATE {TABLE_NAME}
-            SET {COLUMN_NAME} = {COLUMN_NAME} || @json::jsonb
-            WHERE {PRIMARY_KEY} = @key";
-            using var updateCmd = new NpgsqlCommand(UpdateSql, conn);
-        updateCmd.Parameters.AddWithValue("@key", key);
-        updateCmd.Parameters.AddWithValue("@json", updateJson);
-
+        using var updateCmd = CreateUpdateCommand(conn, key, updateJson);
         var rows = await updateCmd.ExecuteNonQueryAsync();
 
         if (rows == 0)
             return Response.Fail(statusCode: "no data");
 
-        size += Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(updateJson);
+        size += PostgresNoSQLHelper.GetSize(key, updateJson);
 
         return Response.Ok(sizeBytes: size);
     }
@@ -179,26 +147,45 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
     {
         string jsonValue = JsonSerializer.Serialize(values);
 
-        string UpdateSql = $@"
-            UPDATE {TABLE_NAME}
-            SET {COLUMN_NAME} = {COLUMN_NAME} || @json::jsonb
-            WHERE {PRIMARY_KEY} = @key";
-
         await using var conn = await _dataSource.OpenConnectionAsync();
-
-        using var cmd = new NpgsqlCommand(UpdateSql, conn);
-
-        cmd.Parameters.AddWithValue("@key", key);
-        cmd.Parameters.AddWithValue("@json", jsonValue);
+        using var cmd = CreateUpdateCommand(conn, key, jsonValue);
 
         var rows = await cmd.ExecuteNonQueryAsync();
 
         if (rows == 0)
             return Response.Fail(statusCode: "no data");
 
-        var sizeBytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(jsonValue);
+        var sizeBytes = PostgresNoSQLHelper.GetSize(key, jsonValue);
 
         return Response.Ok(sizeBytes: sizeBytes);
+    }
+
+    private static NpgsqlCommand CreateReadCommand(NpgsqlConnection conn, string key, HashSet<string>? fields)
+    {
+        var cmd = new NpgsqlCommand(null, conn);
+        var selected = fields == null || fields.Count == 0
+            ? COLUMN_NAME
+            : $"{PostgresNoSQLHelper.BuildProjection(fields, cmd.Parameters)} as {COLUMN_NAME}";
+
+        cmd.CommandText = $@"
+                SELECT {selected}
+                FROM {TABLE_NAME}
+                WHERE {PRIMARY_KEY} = @key";
+        cmd.Parameters.AddWithValue("@key", key);
+        return cmd;
+    }
+
+    private static NpgsqlCommand CreateUpdateCommand(NpgsqlConnection conn, string key, string jsonValue)
+    {
+        const string sql = $@"
+            UPDATE {TABLE_NAME}
+            SET {COLUMN_NAME} = {COLUMN_NAME} || @json::jsonb
+            WHERE {PRIMARY_KEY} = @key";
+
+        var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@key", key);
+        cmd.Parameters.AddWithValue("@json", jsonValue);
+        return cmd;
     }
 
     public async Task<Response<object>> BulkInsert(string table, Dictionary<string, Dictionary<string, string>> data)
@@ -207,13 +194,11 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
         {
             const int chunkSize = 1000;
 
-            var chunks = data.Chunk(chunkSize).ToList();
-
-            var tasks = chunks.Select(async chunk =>
+            var tasks = data.Chunk(chunkSize).Select(async chunk =>
             {
                 await using var conn = await _dataSource.OpenConnectionAsync();
 
-                var batch = new NpgsqlBatch(conn);
+                using var batch = new NpgsqlBatch(conn);
 
                 foreach (var item in chunk)
                 {
@@ -230,7 +215,6 @@ public class PostgresNoSQLYcsbClient : IDbYcsbClient
                 }
 
                 await batch.ExecuteNonQueryAsync();
-                batch.Dispose();
             });
 
             await Task.WhenAll(tasks);
