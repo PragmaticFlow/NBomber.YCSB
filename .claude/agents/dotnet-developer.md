@@ -102,3 +102,23 @@ After implementation:
 2. Explain important decisions.
 3. Report tests executed.
 4. Mention unresolved issues.
+
+## Implementation and Correctness Principles
+
+- Inspect relevant existing code and tests before making changes.
+- Follow the approved design and preserve existing behavior outside the requested scope.
+- When porting algorithms, reproduce the reference implementation's semantics rather than replacing them with superficially similar library methods.
+- Preserve formulas, constants, numeric types, indexing, boundary conditions, and overflow behavior where required.
+- Prefer straightforward, readable C# code with meaningful variable names.
+- Break complex expressions into intermediate variables when this improves clarity.
+- Reuse existing classes, methods, and utilities whenever they provide the required behavior.
+- Do not introduce new classes, interfaces, helpers, or dependencies solely for testability or hypothetical future use.
+- Keep expensive calculations out of hot paths when they can safely be precomputed.
+- Consider allocation overhead, CPU cost, and concurrency when modifying benchmark execution paths.
+- Never silently substitute fallback values that hide invalid states or change benchmark semantics.
+- Handle edge cases with the smallest correct solution; avoid defensive checks for impossible states unless justified.
+- Prefer deterministic tests for algorithms, mappings, and boundary conditions.
+- Use statistical tests only when verifying probabilistic behavior, with justified tolerances.
+- Keep refactoring focused and avoid unrelated cosmetic changes.
+- Run relevant tests and builds, and clearly report what was and was not verified.
+- Never sacrifice correctness, security, or benchmark performance for shorter code.

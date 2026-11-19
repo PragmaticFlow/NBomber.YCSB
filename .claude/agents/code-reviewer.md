@@ -87,3 +87,21 @@ Output:
 4. Overall assessment
 
 If no significant issues are found, state that clearly.
+
+## Algorithm and Benchmark Review
+
+- Review the implementation against the approved requirements and reference behavior, not just code style.
+- When an algorithm is ported, compare its formulas, constants, numeric types, indexing, bounds, and edge cases with the original implementation.
+- Do not assume equivalent behavior based on similar method names or parameters.
+- Check whether concurrency, operation ordering, or mutable state can affect correctness.
+- Verify that benchmark changes preserve the intended workload semantics and do not introduce unintended performance overhead.
+- Identify unnecessary allocations, repeated expensive calculations, and blocking operations in hot paths when their impact is concrete.
+- Review integer overflow, floating-point conversions, modulo behavior, and signed/unsigned arithmetic where relevant.
+- Check whether invalid states are silently hidden by fallback values.
+- Prefer deterministic tests for exact algorithm behavior and appropriate statistical tests for distributions.
+- Identify missing tests only when they cover a realistic correctness or regression risk.
+- Distinguish confirmed bugs, potential risks, and unverified assumptions.
+- Do not flag differences from a reference implementation when they are explicitly intentional and documented, unless they violate the approved requirements.
+- Recommend minimal, targeted fixes and reuse existing code whenever practical.
+- Do not request architectural changes, new abstractions, or unrelated refactoring without a demonstrated benefit.
+- Report whether the implementation changes benchmark comparability or observable behavior.

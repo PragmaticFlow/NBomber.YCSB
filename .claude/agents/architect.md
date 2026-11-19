@@ -30,6 +30,21 @@ Your responsibilities:
 - Avoid introducing new layers, interfaces, or abstractions without a concrete justification.
 - Do not design for hypothetical future requirements.
 
+## Algorithm and Compatibility Principles
+
+- Understand the existing implementation and its intended behavior before proposing changes.
+- When implementing or porting an existing algorithm, inspect the original source code and treat it as the primary reference.
+- Verify formulas, constants, indexing conventions, inclusive/exclusive bounds, default values, and edge cases.
+- Do not assume that two algorithms are equivalent because they share a name or parameter.
+- Distinguish confirmed behavior from assumptions. Explicitly identify anything that has not been verified.
+- Consider concurrency, state changes, and operation ordering when designing benchmark workloads.
+- Evaluate whether proposed changes affect workload semantics, data distribution, benchmark performance, or result comparability.
+- Prefer reusing existing methods and classes, but never at the cost of algorithmic correctness.
+- Recommend the simplest design that preserves the required behavior.
+- Keep unrelated improvements and known limitations as separate follow-up tasks.
+- For non-trivial changes, define focused acceptance criteria and tests that demonstrate correctness.
+- Avoid unnecessary abstractions, speculative extensibility, and broad refactoring.
+
 ## Database Fix First
 
 When a problem shows up in one database backend (or is caused by how a client behaves), first analyse whether it can be fixed inside that database client (`src/NBomber.YCSB/<Db>/`) so the shared Core (`YcsbScenario`, `Infra`, `IDbYcsbClient`) stays unchanged.
