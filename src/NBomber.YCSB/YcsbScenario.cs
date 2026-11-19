@@ -11,7 +11,8 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
     {
         var operations = WorkloadManager.GetOperations(settings.Workload);
         var workloadDescription = WorkloadManager.GetDescription(settings.Workload);
-        var tableName = "test_table";
+
+        const string TABLE_NAME = "test_table";
 
         var insertProportion = (double)operations.Where(o => o.Item1 == OperationType.Insert).Sum(o => o.Item2)
                                / operations.Sum(o => o.Item2);
@@ -30,7 +31,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
 
                     try
                     {
-                        await Step.Run("insert", context, () => ycsbClient.Insert(table: tableName, key, values));
+                        await Step.Run("insert", context, () => ycsbClient.Insert(table: TABLE_NAME, key, values));
                     }
                     finally
                     {
@@ -44,7 +45,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     var key = dataGen.GetKeyZipf(context.Random);
                     var fields = dataGen.GetFieldNames();
 
-                    await Step.Run("read", context, () => ycsbClient.Read(table: tableName, key, fields));
+                    await Step.Run("read", context, () => ycsbClient.Read(table: TABLE_NAME, key, fields));
                     break;
                 }
 
@@ -53,7 +54,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     var key = dataGen.GetKeyLatest(context.Random);
                     var fields = dataGen.GetFieldNames();
 
-                    await Step.Run("read latest", context, () => ycsbClient.Read(table: tableName, key, fields));
+                    await Step.Run("read latest", context, () => ycsbClient.Read(table: TABLE_NAME, key, fields));
                     break;
                 }
 
@@ -62,7 +63,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     var key = dataGen.GetKeyZipf(context.Random);
                     var values = dataGen.CreateValuesToUpdate();
 
-                    await Step.Run("update", context, () => ycsbClient.Update(table: tableName, key, values));
+                    await Step.Run("update", context, () => ycsbClient.Update(table: TABLE_NAME, key, values));
                     break;
                 }
 
@@ -72,7 +73,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     var fields = dataGen.GetFieldNames();
                     var recordScan = dataGen.NextScanLength(context.Random);
 
-                    await Step.Run("scan", context, () => ycsbClient.Scan(table: tableName, key, recordScan, fields));
+                    await Step.Run("scan", context, () => ycsbClient.Scan(table: TABLE_NAME, key, recordScan, fields));
                     break;
                 }
 
@@ -82,7 +83,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
                     var fields = dataGen.GetFieldNames();
                     var updateValues = dataGen.CreateValuesToUpdate();
 
-                    await Step.Run("read-modify-write", context, () => ycsbClient.ReadModifyWrite(table: tableName, key, fields, updateValues));
+                    await Step.Run("read-modify-write", context, () => ycsbClient.ReadModifyWrite(table: TABLE_NAME, key, fields, updateValues));
                     break;
                 }
             }
@@ -93,9 +94,7 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             await ycsbClient.DeleteAllData();
             await ycsbClient.InitDb();
 
-            var list = dataGen.GenerateRandoms();
-
-            await ycsbClient.BulkInsert(tableName, list);
+            await ycsbClient.BulkInsert(TABLE_NAME, dataGen.GenerateRandoms());
         })
         .WithLoadSimulations(
             Simulation.IterationsForConstant(copies: settings.ThreadCount, iterations: settings.OperationCount)
@@ -105,10 +104,11 @@ public class YcsbScenario(IDbYcsbClient ycsbClient)
             ? scenario.WithWarmUpDuration(TimeSpan.FromSeconds(settings.WarmUp))
             : scenario.WithoutWarmUp();
 
+        var testName = $"Test {settings.Db} - {workloadDescription}";
         var runner = NBomberRunner
                .RegisterScenarios(scenario)
-               .WithTestName($"Test {settings.Db} - {workloadDescription}")
-               .WithTestSuite($"Test {settings.Db} - {workloadDescription}")
+               .WithTestName(testName)
+               .WithTestSuite(testName)
                .WithReportingInterval(TimeSpan.FromSeconds(5));
 
         if (!string.IsNullOrWhiteSpace(settings.ExportFile))
