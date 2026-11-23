@@ -23,8 +23,8 @@ context: |
   - One folder per database, each with a client class, an optional static
     helper, and a docker-compose.yml: Redis, MongoDb, PosgresNoSQL (folder
     name is misspelled; keep it), RavenDb, ScyllaDb.
-  - YcsbScenario builds one NBomber scenario. Init runs InitDb, then
-    DeleteAllData, then BulkInsert of recordcount rows. Each iteration picks
+  - YcsbScenario builds one NBomber scenario. Init runs DeleteAllData, then
+    InitDb, then BulkInsert of recordcount rows. Each iteration picks
     a weighted operation. Load: IterationsForConstant(threadcount, operationcount).
   - Database settings come from `-p key=value` props read with
     YcsbCliArgs.TryGet/TryParseInt, using `<db>.<setting>` names such as
@@ -32,8 +32,8 @@ context: |
 
   Database models:
   - Redis: hash at "hash:<key>"; sorted set "_indices" holds raw keys for Scan.
-  - MongoDB: database "ycsb"; document { _id, fields: { fieldN }, createdAt, updatedAt }.
-  - PostgreSQL: ycsb_table(ycsb_key PK, ycsb_value JSONB NOT NULL) plus a GIN
+  - MongoDB: database "ycsb"; flat document { _id, field1..fieldN }.
+  - PostgreSQL: ycsb_table(ycsb_key PK, ycsb_value JSONB NOT NULL), no GIN
     index. Updates merge with `ycsb_value || @json::jsonb`.
   - RavenDB: documents in the configured database (default "ycsb").
   - ScyllaDB: keyspace "ycsb", table ycsb_table(ycsb_key, field1..fieldN),

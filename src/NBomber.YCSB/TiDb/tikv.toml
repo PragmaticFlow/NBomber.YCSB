@@ -1,0 +1,50 @@
+# Keeps the single TiKV node inside its 1536m container limit (1g gets it OOM-killed). The defaults (block cache
+# 45% of host RAM, 128MB memtables per column family, thread pools sized by host CPUs) use more than that.
+memory-usage-limit = "700MB"
+
+[storage.block-cache]
+capacity = "256MB"
+
+[server]
+grpc-concurrency = 2
+
+[readpool.unified]
+max-thread-count = 4
+
+[raftstore]
+store-pool-size = 1
+apply-pool-size = 1
+
+[rocksdb.defaultcf]
+write-buffer-size = "32MB"
+max-write-buffer-number = 2
+
+[rocksdb.writecf]
+write-buffer-size = "32MB"
+max-write-buffer-number = 2
+
+[rocksdb.lockcf]
+write-buffer-size = "16MB"
+max-write-buffer-number = 2
+
+[raftdb.defaultcf]
+write-buffer-size = "16MB"
+max-write-buffer-number = 2
+
+[rocksdb]
+max-background-jobs = 2
+max-open-files = 1024
+
+[raftdb]
+max-background-jobs = 1
+max-open-files = 1024
+
+[storage]
+scheduler-worker-pool-size = 2
+
+[import]
+num-threads = 1
+
+[memory]
+enable-heap-profiling = false
+enable-thread-exclusive-arena = false

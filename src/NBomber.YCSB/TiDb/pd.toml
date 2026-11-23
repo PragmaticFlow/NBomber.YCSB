@@ -1,0 +1,3 @@
+# One TiKV store only; the default of 3 replicas would leave every region under-replicated.
+[replication]
+max-replicas = 1

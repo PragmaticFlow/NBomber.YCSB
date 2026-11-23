@@ -26,6 +26,8 @@
     <PackageReference Include="StackExchange.Redis" Version="2.11.3" />
     <PackageReference Include="Standart.Hash.xxHash" Version="4.0.5" />
     <PackageReference Include="RavenDB.Client" Version="6.2.2" />
+    <PackageReference Include="Aerospike.Client" Version="8.5.0" />
+    <PackageReference Include="MySqlConnector" Version="2.6.2" />
   </ItemGroup>
 
 </Project>

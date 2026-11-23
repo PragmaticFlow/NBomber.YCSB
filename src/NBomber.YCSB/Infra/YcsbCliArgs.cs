@@ -42,7 +42,7 @@ public class YcsbCliArgs
     };
     private static readonly Option<string?> DbOpt = new("--db")
     {
-        Description = "Database type (redis, postgres, etc.)"
+        Description = "Database type: redis, keydb, mongodb, postgres, cockroachdb, tidb, ravendb, scylladb, cassandra, aerospike"
     };
     private static readonly Option<int> ThreadCountOpt = new("--threadcount")
     {

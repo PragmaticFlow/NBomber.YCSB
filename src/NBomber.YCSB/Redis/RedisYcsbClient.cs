@@ -7,8 +7,9 @@ using StackExchange.Redis;
 
 namespace NBomber.YCSB.Redis;
 
-public class RedisYcsbClient : IDbYcsbClient
+public class RedisYcsbClient : IDbYcsbClient, IDisposable
 {
+    private readonly ConnectionMultiplexer _redis;
     private readonly IDatabase _db;
     private readonly IServer _server;
     private const string INDEX_KEY = "_indices";
@@ -30,20 +31,22 @@ public class RedisYcsbClient : IDbYcsbClient
                 AllowAdmin = true,
             };
 
-            var redis = ConnectionMultiplexer.Connect(options);
-            _db = redis.GetDatabase();
+            _redis = ConnectionMultiplexer.Connect(options);
+            _db = _redis.GetDatabase();
 
-            var endpoints = redis.GetEndPoints();
-            _server = redis.GetServer(endpoints[0]);
+            var endpoints = _redis.GetEndPoints();
+            _server = _redis.GetServer(endpoints[0]);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to connect to Redis server: {ex.Message}[/]");
+            Console.WriteLine($"Failed to connect to Redis server: {ex.Message}");
             throw;
         }
     }
 
     private static string AddKeyPrefix(string key) => $"{HASH_PREFIX}{key}";
+
+    public void Dispose() => _redis.Dispose();
 
     public async Task<Response<object>> Insert(string table, string key, Dictionary<string, string> values)
     {

@@ -1,10 +1,13 @@
 using NBomber.YCSB.Infra;
 using NBomber.YCSB.Redis;
+using StackExchange.Redis;
 
 namespace NBomber.YCSB.Tests
 {
     public class RedisTests
     {
+        private const string ENDPOINT = "localhost:6379";
+
         [Fact]
         public async Task Workload_A_Shold_Execute_50_Read_50_Update()
         {
@@ -160,11 +163,11 @@ namespace NBomber.YCSB.Tests
             });
         }
 
-        // Live Redis tests: use unique keys and do not flush the database.
+        // Live Redis tests: Workload_* and DeleteAllData_* flush the database, the rest use unique keys.
         [Fact]
         public async Task Insert_Then_Read_Should_Use_Same_Key_And_Field_Names()
         {
-            var client = CreateClient();
+            using var client = CreateClient();
             var key = $"test-{Guid.NewGuid()}";
             var values = new Dictionary<string, string> { ["field0"] = "a", ["field1"] = "b" };
 
@@ -182,7 +185,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public async Task Read_And_ReadModifyWrite_With_Fields_Should_Fail_For_Missing_Key()
         {
-            var client = CreateClient();
+            using var client = CreateClient();
             var key = $"missing-{Guid.NewGuid()}";
             var fields = new HashSet<string> { "field0" };
 
@@ -196,7 +199,7 @@ namespace NBomber.YCSB.Tests
         [Fact]
         public async Task Scan_With_Fields_Should_Return_Only_Requested_Fields_Size()
         {
-            var client = CreateClient();
+            using var client = CreateClient();
             var prefix = $"scan-{Guid.NewGuid()}";
             var values = new Dictionary<string, string> { ["field0"] = "aaaa", ["field1"] = new string('b', 1000) };
 
@@ -207,6 +210,86 @@ namespace NBomber.YCSB.Tests
 
             Assert.False(subset.IsError);
             Assert.True(subset.SizeBytes < all.SizeBytes);
+        }
+
+        [Fact]
+        public async Task Index_Sorted_Set_Should_Support_Lexicographic_Range_Inclusive_And_Ordered()
+        {
+            using var client = CreateClient();
+            var prefix = $"lex-{Guid.NewGuid()}";
+            var values = new Dictionary<string, string> { ["field0"] = "v" };
+            var data = new Dictionary<string, Dictionary<string, string>>
+            {
+                [$"{prefix}-c"] = values,
+                [$"{prefix}-a"] = values,
+                [$"{prefix}-b"] = values
+            };
+
+            await client.BulkInsert("usertable", data);
+
+            using var mux = await ConnectionMultiplexer.ConnectAsync(ENDPOINT);
+            var keys = await mux.GetDatabase().SortedSetRangeByValueAsync("_indices", $"{prefix}-b", default, Exclude.None, Order.Ascending, 0, 2);
+            var scan = await client.Scan("usertable", $"{prefix}-b", 2, new HashSet<string>());
+
+            Assert.Equal([$"{prefix}-b", $"{prefix}-c"], keys.Select(k => (string)k!).ToArray());
+            Assert.False(scan.IsError);
+            Assert.True(scan.SizeBytes > 0);
+        }
+
+        [Fact]
+        public async Task DeleteAllData_Should_Flush_Keys_And_Index()
+        {
+            using var client = CreateClient();
+            var key = $"flush-{Guid.NewGuid()}";
+            await client.Insert("usertable", key, new Dictionary<string, string> { ["field0"] = "v" });
+
+            var delete = await client.DeleteAllData();
+            var read = await client.Read("usertable", key, new HashSet<string>());
+
+            using var mux = await ConnectionMultiplexer.ConnectAsync(ENDPOINT);
+            Assert.False(delete.IsError);
+            Assert.True(read.IsError);
+            Assert.False(await mux.GetDatabase().KeyExistsAsync("_indices"));
+        }
+
+        [Fact]
+        public async Task Update_Should_Preserve_Unrelated_Fields()
+        {
+            using var client = CreateClient();
+            var key = $"upd-{Guid.NewGuid()}";
+            await client.Insert("usertable", key, new Dictionary<string, string> { ["field0"] = "a", ["field1"] = "b" });
+
+            await client.Update("usertable", key, new Dictionary<string, string> { ["field0"] = "z" });
+
+            using var mux = await ConnectionMultiplexer.ConnectAsync(ENDPOINT);
+            var hash = await mux.GetDatabase().HashGetAllAsync($"hash:{key}");
+            Assert.Equal("z", hash.First(h => h.Name == "field0").Value);
+            Assert.Equal("b", hash.First(h => h.Name == "field1").Value);
+        }
+
+        [Fact]
+        public async Task Unreachable_Server_Should_Throw()
+        {
+            using var client = new RedisYcsbClient(YcsbCliArgs.ParseProps(["redis.host=localhost", "redis.port=1"]));
+
+            await Assert.ThrowsAnyAsync<Exception>(() => client.DeleteAllData());
+        }
+
+        [Fact]
+        public async Task Client_Should_Default_To_Port_6379_With_Redis_Prefix()
+        {
+            using var client = new RedisYcsbClient(YcsbCliArgs.ParseProps(["redis.host=localhost"]));
+            var key = $"default-port-{Guid.NewGuid()}";
+
+            await client.Insert("usertable", key, new Dictionary<string, string> { ["field0"] = "v" });
+
+            using var mux = await ConnectionMultiplexer.ConnectAsync(ENDPOINT);
+            var db = mux.GetDatabase();
+            var exists = await db.KeyExistsAsync($"hash:{key}");
+            await db.KeyDeleteAsync($"hash:{key}");
+            await db.SortedSetRemoveAsync("_indices", key);
+
+            Assert.True(exists);
         }
 
         private static RedisYcsbClient CreateClient()
@@ -232,7 +315,7 @@ namespace NBomber.YCSB.Tests
 
             var props = YcsbCliArgs.ParseProps(settings.Props);
 
-            var redisClient = new RedisYcsbClient(props);
+            using var redisClient = new RedisYcsbClient(props);
 
             var scenario = new YcsbScenario(redisClient);
 

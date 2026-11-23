@@ -1,0 +1,27 @@
+# Single-node Aerospike Community Edition with namespace "test" stored in memory.
+# The image template (8.1.x) only reads NAMESPACE, DATA_IN_MEMORY and STORAGE_GB (MEM_GB is unused):
+# DATA_IN_MEMORY=true selects the "memory" storage engine, and STORAGE_GB is the size of its
+# backing file inside the container, i.e. the in-memory data capacity. The server stops
+# accepting writes at 70% of it (stop-writes-used-pct), about 1.9M records.
+# Measured: ~1.18 KB of data and ~2.4 KB of container RSS (data plus primary index) per record at
+# fieldcount 10 / fieldlength 100. mem_limit 4g therefore safely fits recordcount up to ~1.4M
+# (~3.4 GB RSS); larger loads risk an OOM kill before stop-writes. Docker Desktop's VM memory
+# (.wslconfig) also bounds the container.
+# No named volume: data is lost when the container is removed.
+services:
+  aerospike:
+    image: aerospike/aerospike-server:8.1.2.5
+    container_name: aerospike
+    ports:
+      - "3000:3000"
+    environment:
+      NAMESPACE: test
+      DATA_IN_MEMORY: "true"
+      STORAGE_GB: "3"
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD-SHELL", "asinfo -v status | grep -q ok"]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 12
