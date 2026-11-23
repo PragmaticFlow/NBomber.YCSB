@@ -14,6 +14,12 @@ public class YcsbCliArgsValidator : AbstractValidator<YcsbCliArgs>
             .LessThanOrEqualTo(x => x.GetMaxScanLength())
             .WithMessage(x => $"minscanlength ({x.MinScanLength}) must not exceed maxscanlength ({x.GetMaxScanLength()}).");
 
+        // Aerospike has no ordered primary-key range access, so YCSB scans cannot be reproduced.
+        RuleFor(x => x.Workload)
+            .NotEqual(Workload.E)
+            .When(x => string.Equals(x.Db, "aerospike", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Aerospike does not support scan, so workload E cannot run with --db aerospike.");
+
         RuleFor(x => x.WarmUp)
             .GreaterThanOrEqualTo(0)
             .WithMessage(x => $"warmup ({x.WarmUp}) must be 0 or greater.");

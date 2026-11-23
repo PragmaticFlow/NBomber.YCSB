@@ -107,6 +107,28 @@ namespace NBomber.YCSB.Tests
             Assert.False(result.IsValid);
         }
 
+        [Theory]
+        [InlineData("aerospike")]
+        [InlineData("Aerospike")]
+        public void Validator_Rejects_Workload_E_For_Aerospike(string db)
+        {
+            var result = new YcsbCliArgsValidator().Validate(new YcsbCliArgs { Workload = Workload.E, Db = db });
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, e => e.ErrorMessage.Contains("Aerospike"));
+        }
+
+        [Theory]
+        [InlineData("aerospike", Workload.A)]
+        [InlineData("aerospike", Workload.D)]
+        [InlineData("redis", Workload.E)]
+        public void Validator_Accepts_Other_Db_Workload_Combinations(string db, Workload workload)
+        {
+            var result = new YcsbCliArgsValidator().Validate(new YcsbCliArgs { Workload = workload, Db = db });
+
+            Assert.True(result.IsValid);
+        }
+
         // Parsing
 
         [Fact]

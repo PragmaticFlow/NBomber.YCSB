@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-NBomber.YCSB is a .NET 9 console app that implements the Yahoo! Cloud Serving Benchmark (YCSB) on top of NBomber, with backends for Redis, MongoDB, PostgreSQL (JSONB), RavenDB and ScyllaDB. It is a benchmark tool: changes must keep results correct and comparable with the original Java YCSB and across databases. Project docs: https://nbomber.com/docs/load-testing-databases/overview
+NBomber.YCSB is a .NET 9 console app that implements the Yahoo! Cloud Serving Benchmark (YCSB) on top of NBomber, with backends for Redis, KeyDB, MongoDB, PostgreSQL (JSONB), CockroachDB, TiDB, RavenDB, ScyllaDB, Cassandra and Aerospike. It is a benchmark tool: changes must keep results correct and comparable with the original Java YCSB and across databases. Project docs: https://nbomber.com/docs/load-testing-databases/overview
 
 ## Commands
 
@@ -13,7 +13,7 @@ dotnet build NBomber.YCSB.sln          # NuGet audit warnings NU1900-NU1904 are 
 dotnet run --project src/NBomber.YCSB -- run --workload A --db redis -p redis.host=localhost -p redis.port=6379
 
 # Offline tests (no database needed)
-dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~DataGeneratorTests|FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests|FullyQualifiedName~ZipfianExtensionsTests|FullyQualifiedName~MongoDbHelperTests|FullyQualifiedName~PostgresNoSQLHelperTests"
+dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName~DataGeneratorTests|FullyQualifiedName~ScanLengthTests|FullyQualifiedName~RedisHelperTests|FullyQualifiedName~ScyllaDbHelperTests|FullyQualifiedName~ZipfianExtensionsTests|FullyQualifiedName~MongoDbHelperTests|FullyQualifiedName~PostgresNoSQLHelperTests|FullyQualifiedName~KeyDbHelperTests|FullyQualifiedName~CassandraHelperTests|FullyQualifiedName~CockroachDbHelperTests|FullyQualifiedName~TiDbHelperTests|FullyQualifiedName~AerospikeHelperTests"
 
 # Single test
 dotnet test tests/NBomber.YCSB.Tests --filter "FullyQualifiedName=NBomber.YCSB.Tests.ScanLengthTests.Validator_Accepts_Defaults"
@@ -29,6 +29,11 @@ Live test classes (`<Db>Tests`) need that folder's compose stack running on its 
 - RavenDB hard-deletes its database.
 - Scylla drops `ycsb_table` (keyspace kept); `InitDb` recreates it.
 - Postgres drops `ycsb_table` (other tables untouched); `InitDb` recreates it.
+- KeyDB flushes the whole KeyDB database (port 6380).
+- Cassandra drops `ycsb_table` (keyspace kept, port 9043); `InitDb` recreates it.
+- CockroachDB drops `ycsb_table` in `defaultdb`; `InitDb` recreates it.
+- TiDB drops `ycsb.ycsb_table` (database kept); `InitDb` recreates it.
+- Aerospike truncates set `ycsb_table` in namespace `test` (other sets untouched); the purge finishes in the background.
 
 Only run live tests against the project's own disposable containers, after checking nothing else (another project's container, a WSL service) is serving the port. Use exact `FullyQualifiedName=` filters when running individual live tests.
 
@@ -42,13 +47,20 @@ Flow: `Program.cs` parses the `run` command into `YcsbCliArgs`, validates it wit
   - `Workload.cs`: `WorkloadManager` per-workload presets (operation mix, defaults such as max scan length).
   - `DataGenerator`: keys (`user` + zero padding + number, hashed or ordered), field names and values, key choice, scan length.
   - `IDbYcsbClient`: the only database abstraction.
-- One folder per backend (`Redis`, `MongoDb`, `PosgresNoSQL` (misspelled, keep it), `RavenDb`, `ScyllaDb`), each with a client implementing `IDbYcsbClient`, an optional static helper, and a `docker-compose.yml`. Clients read their connection settings from props via `YcsbCliArgs.TryGet`/`TryParseInt` using `<db>.<setting>` names. Scylla also receives `fieldcount` through props (`Program.cs`).
+- One folder per backend (`Redis`, `KeyDb`, `MongoDb`, `PosgresNoSQL` (misspelled, keep it), `CockroachDb`, `TiDb`, `RavenDb`, `ScyllaDb`, `CassandraDb`, `AerospikeDb`), each with a client implementing `IDbYcsbClient`, an optional static helper, and a `docker-compose.yml`. Clients read their connection settings from props via `YcsbCliArgs.TryGet`/`TryParseInt` using `<db>.<setting>` names. Scylla, Cassandra and TiDB also receive `fieldcount` through props (`Program.cs`).
+- Every database client is independent: it implements `IDbYcsbClient` directly, with no inheritance, delegation or helper calls into another database's folder. Duplicated code is intentional. Only Infra, `IDbYcsbClient` and driver packages are shared.
+- `KeyDbYcsbClient`, `CassandraYcsbClient` and `CockroachDbYcsbClient` (and their helpers) are line-for-line copies of the Redis, ScyllaDB and PostgreSQL logic, differing only in props, names and log text (and CockroachDB's bounded `BulkInsert`: 1000-row chunks, at most 8 in parallel). When you fix or change one of these clients, check its copy and decide per database; keep each pair identical unless a difference is intended, so their results stay comparable.
+- Never declare `namespace NBomber.YCSB.Cassandra` or `NBomber.YCSB.Aerospike`: they shadow the driver namespaces `Cassandra` and `Aerospike.Client`. That is why these folders are `CassandraDb` and `AerospikeDb`.
 - Client contract: every operation returns NBomber `Response<object>` with `sizeBytes`, or `Response.Fail(statusCode: "no data")` on a miss. Clients never return record data. Update and ReadModifyWrite are partial updates and must preserve unrelated fields.
 
 ## Gotchas
 
 - `MessagePack` in `NBomber.YCSB.csproj` is not used by our code. It pins NBomber's transitive dependency to a patched version; do not remove it, or the build fails the NuGet audit.
-- `PostgresNoSQLYcsbClient` keeps its `NpgsqlDataSource` in a static field that each new instance replaces.
+- `PostgresNoSQLYcsbClient` keeps its `NpgsqlDataSource` in a static field that each new instance replaces, and its `BulkInsert` starts all 1000-row chunks at once (pool exhaustion above ~100k records). Both are known; fixing them is a separate follow-up. `CockroachDbYcsbClient` uses an instance data source and a bounded `BulkInsert`.
+- New-backend limitations (details in README "Benchmark limitations"): KeyDB's one multiplexed connection probably does not use its second server thread; Cassandra scans in token order (not lexicographic primary-key order, as in the Java binding) and upserts missing keys, `cassandra.replicationfactor` applies only when the keyspace is created (drop an existing `ycsb` keyspace to change it), and its default RF 1 on one node is not comparable with Scylla's default RF 3 on three nodes; CockroachDB relies on the documented single-node licence exemption from throttling (not verifiable from the server); TiDB uses the text protocol (no server-side prepare), optimistic autocommit retried by TiDB, cold-start connect timeouts without `--warmup`, and delayed GC after `DROP TABLE`; Aerospike has no scan (validator rejects workload E), serves data from memory with a backing file inside the container (lost on container removal), has create-only inserts and update-only (not Java's replace-only) updates, and caps concurrency with `aerospike.maxconcurrency` (default 512).
+- Docker memory: run one stack at a time. TiDB needs about 2.3 GB (TiKV 1.5 GB), Aerospike up to 4 GB, Cassandra 1.5 GB.
+- ScyllaDB compose: after a Docker restart, `fs.aio-max-nr` resets (re-run `scylla-init-sysctl`) and the nodes can come back with each other's IP addresses, which stops them from starting.
+- The Cassandra compose file sets `name: cassandra`, so the project, container and volume (`cassandra_cassandra_data`) keep their names after the move from `Cassandra/` to `CassandraDb/`.
 - Offline helper tests (`*HelperTests`, `ScanLengthTests`) are not run by CI, which only filters the per-database live test classes.
 - `--exportfile dir/name` writes `dir/name.{csv,html,md,txt}` without a timestamp folder (repeated runs overwrite); a bare name goes to `reports/<timestamp>/`.
 - Results produced before `--warmup` existed used a fixed 3-second warm-up and may not be directly comparable with default (no warm-up) runs; `--warmup 3` reproduces the old behaviour.

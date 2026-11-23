@@ -1,0 +1,23 @@
+# CockroachDB v24.3+ is under the CockroachDB Software License. The docs state that single-node clusters started with
+# "cockroach start-single-node" are not throttled; see README for the licensing note and benchmark limitation.
+services:
+
+  cockroachdb:
+    image: cockroachdb/cockroach:v26.4.1
+    container_name: cockroachdb
+    command: start-single-node --insecure --cache=128MiB --max-sql-memory=128MiB
+    ports:
+      - "26257:26257"
+    mem_limit: 1g
+    volumes:
+      - cockroach_data:/cockroach/cockroach-data
+    healthcheck:
+      test: ["CMD", "cockroach", "sql", "--insecure", "-e", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  cockroach_data:
+    driver: local

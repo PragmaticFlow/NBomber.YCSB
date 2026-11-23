@@ -1,12 +1,17 @@
 using System.CommandLine;
 using NBomber.YCSB;
+using NBomber.YCSB.AerospikeDb;
+using NBomber.YCSB.CassandraDb;
+using NBomber.YCSB.CockroachDb;
 using NBomber.YCSB.DAL;
 using NBomber.YCSB.Infra;
+using NBomber.YCSB.KeyDb;
 using NBomber.YCSB.MongoDb;
 using NBomber.YCSB.PosgresNoSQL;
 using NBomber.YCSB.RavenDb;
 using NBomber.YCSB.Redis;
 using NBomber.YCSB.ScyllaDb;
+using NBomber.YCSB.TiDb;
 
 Console.WriteLine("NBomber YCSB interactive console started.");
 Console.WriteLine("Type a command (for example):");
@@ -48,17 +53,29 @@ static IDbYcsbClient GetYcsbClient(YcsbCliArgs settings)
 
     switch (settings.Db?.ToLower())
     { 
-        case "redis": 
+        case "redis":
             return new RedisYcsbClient(propsDict);
+        case "keydb":
+            return new KeyDbYcsbClient(propsDict);
         case "mongodb":
             return new MongoDbYcsbClient(propsDict);
         case "postgres":
             return new PostgresNoSQLYcsbClient(propsDict);
+        case "cockroachdb":
+            return new CockroachDbYcsbClient(propsDict);
+        case "tidb":
+            propsDict["fieldcount"] = settings.FieldCount.ToString();
+            return new TiDbYcsbClient(propsDict);
         case "ravendb":
             return new RavenDbYcsbClient(propsDict);
         case "scylladb":
             propsDict["fieldcount"] = settings.FieldCount.ToString();
             return new ScyllaYcsbClient(propsDict);
+        case "cassandra":
+            propsDict["fieldcount"] = settings.FieldCount.ToString();
+            return new CassandraYcsbClient(propsDict);
+        case "aerospike":
+            return new AerospikeYcsbClient(propsDict);
         default:
             throw new NotSupportedException($"Database '{settings.Db}' is not supported.");
     }

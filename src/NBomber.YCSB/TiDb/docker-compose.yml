@@ -1,0 +1,77 @@
+services:
+
+  pd:
+    image: pingcap/pd:v8.5.8
+    container_name: tidb-pd
+    command:
+      - --name=pd
+      - --data-dir=/data/pd
+      - --client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://pd:2379
+      - --peer-urls=http://0.0.0.0:2380
+      - --advertise-peer-urls=http://pd:2380
+      - --initial-cluster=pd=http://pd:2380
+      - --config=/pd.toml
+    volumes:
+      - tidb_pd_data:/data
+      - ./pd.toml:/pd.toml:ro
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:2379/pd/api/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  tikv:
+    image: pingcap/tikv:v8.5.8
+    container_name: tidb-tikv
+    command:
+      - --pd=pd:2379
+      - --addr=0.0.0.0:20160
+      - --advertise-addr=tikv:20160
+      - --status-addr=0.0.0.0:20180
+      - --advertise-status-addr=tikv:20180
+      - --data-dir=/data/tikv
+      - --config=/tikv.toml
+    depends_on:
+      pd:
+        condition: service_healthy
+    volumes:
+      - tidb_tikv_data:/data
+      - ./tikv.toml:/tikv.toml:ro
+    ulimits:
+      nofile:
+        soft: 140000
+        hard: 140000
+    mem_limit: 1536m
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:20180/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  tidb:
+    image: pingcap/tidb:v8.5.8
+    container_name: tidb
+    command:
+      - --store=tikv
+      - --path=pd:2379
+      - --host=0.0.0.0
+      - --status=10080
+    depends_on:
+      tikv:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:10080/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  tidb_pd_data:
+    driver: local
+  tidb_tikv_data:
+    driver: local

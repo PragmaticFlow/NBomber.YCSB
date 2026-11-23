@@ -1,0 +1,20 @@
+services:
+
+  keydb:
+    image: eqalpha/keydb:x86_64_v6.3.4
+    container_name: keydb
+    ports:
+      - "6380:6379"
+    volumes:
+      - keydb_data:/data
+    # StackExchange.Redis uses one multiplexed connection, so the extra server thread is probably not exercised by this client.
+    command: keydb-server --appendonly yes --protected-mode no --server-threads 2
+    healthcheck:
+      test: ["CMD", "keydb-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  keydb_data:
+    driver: local
